@@ -105,5 +105,43 @@ class TempSens:
     def processData(self):
         
         self.dataExtraction()
+
+class CurrentSens:
+    
+    def __init__(self, 
+                 rawData = ['current',32,'2025-01-12 21:48:33',{'current': 0.6908518662808606}], 
+                 
+                 param = {})->None:
+    # def __init__(self, temperature = 20, CO2 = 15, sg = 1.05 , temp_H2O = 18, 
+                #  param = {})->None:
+        self.rawData = rawData
+        
+        self.param= param
+        #outputs
+        
+        self.eCurrent = 0
+        
+        self.eCurr_hystory = []
+        
+    
+    def dataExtraction(self, data):
+        if type(data) == list:
+            for element in data:
+                try:
+                    eCurrent = eval(element)
+                    if type(eCurrent) == dict:
+                        self.eCurrent = eCurrent['current']
+                        self.eCurr_hystory.append(self.eCurrent)
+                except:
+                    pass
+                # extract_data_T = eval(str(self.rawTemp[3]))
+                
+                # self.temp = extract_data_T['temp']
+            
+                # self.temp_hystory.append(self.temp)
+    
+    def processData(self):
+        
+        self.dataExtraction(self.rawData)
        
     

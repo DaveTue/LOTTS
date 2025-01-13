@@ -442,7 +442,7 @@ class Model(Component):
         if self.SimE ==  "Simulink":
             return MatlabAPI.Simulink(self.name, self.dir)            
         elif self.SimE == "Python":
-            return PythonAPI.pythonEncap.load_from_csv(name=self.name, directory=self.dir)
+            return PythonAPI.Wrapping.load_from_csv(name=self.name, directory=self.dir)
         elif self.SimE == 'FMU':
             self.interfaceObj = FMUAPI.FMU(self.name,self.dir)
             # print(self.interfaceObj)
@@ -1191,6 +1191,13 @@ class Duplicator(Component):
         super().__init__(name, ID)        
         self.name = name + str(self.uniqueNum)
         self.type = 'dup'
+        
+        if type(input) == list:
+            input = input[0]
+            print(f'Duplicator {self.name} can only take one input. Only taking the first input define')
+            print('Input considered:')
+            print(input)
+        
         self.inID = super().Port_gen(type = 'input', port = input )
         if abs(int(num_outputs)) < 2:
             self.num_outputs = 2
@@ -1198,6 +1205,8 @@ class Duplicator(Component):
             self.num_outputs = abs(int(num_outputs))
         self.outID = []
         
+        
+            
         self.dup_def(input)
     
     def dup_def(self, input):
@@ -1205,10 +1214,15 @@ class Duplicator(Component):
         idx = 0
         output = input
         name = input['name']
+        outputNames = []
         for out in range(self.num_outputs):
             output['name'] = name + str(out)
+            outputNames.append(output['name'])
             ID = super().Port_gen(type = 'output', port = output)
             self.outID.append(ID)
+        print(f"For duplicator {self.name}, the names of the outputs are:")
+        for o in outputNames:
+            print(o)
             
                 
     def behavior(self, inputsFromConn = ['all'],outputsToConn = ['all']):
@@ -1559,15 +1573,15 @@ class Transformation(Component):
         # print(outNames)
         for outName in outNames:
             if outName not in intOutputs:
-                print(outName + ' is not define in the equations')
+                print('For transformator' + self.name +" the " +outName + ' is not define in the equations')
                 return False
             else:
-                print('All outputs define in the equations')
+                print(f' For transformator {self.name}, all outputs define in the equations are correct')
         for varName in varNames:
             if varName not in inNames and varName not in intOutputs:
                 print(varName + ' is in the equations but not value will be assigned')
                 return False
-        print('All variables within the equations will have a value assigned')
+        print(f'For transformator {self.name}, all variables within the equations are correctly defined')
                 
         
         
@@ -1696,9 +1710,11 @@ class Connector:
         
         
         self.relations = self.def_relations(self.names,self.components,self.TransExpr)
+        # print(self.relations)
         self.con2ports()
-        
-        
+    
+    
+    
     def find_port(self, component:object = [], port_name:str = 'Tempo',type:str = 'output'):
         port = ""
         if type == 'output':

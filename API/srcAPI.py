@@ -26,7 +26,7 @@ class Sensor:
         self.server = ''
         self.client = ''
         self.outputs ={}
-        self.directory = 'D:\\Git_folders\\projects_app\\dsl-orchestration\\sensors'
+        self.directory = 'D:\\Git_folders\\projects_app\\LOTTS\\sensors'
         self.portDefinition()
         # self.initialize_comm()
                 

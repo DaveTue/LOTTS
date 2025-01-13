@@ -28,7 +28,7 @@ class Sink:
         self.server = ''
         self.client = ''
         self.inputs ={}
-        self.directory = 'D:\\Git_folders\\projects_app\\dsl-orchestration\\sensors'
+        self.directory = 'D:\\Git_folders\\projects_app\\LOTTS\\sensors'
         self.portDefinition()
         # self.initialize_comm()
                 

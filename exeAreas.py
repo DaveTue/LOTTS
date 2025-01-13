@@ -14,7 +14,19 @@ class ConnectionHandler:
         self.connections = []
         
     def __str__(self) -> str:
-        pass
+        message = 'Connections are:\n'
+        for connection in self.connections:
+            m =''
+            for key, value in connection.items():
+                if key == 'id':
+                    m += 'id:' + str(value)
+                if key == "src":
+                    m += ' '+ str(value) + '->'
+                if key == "dst":
+                    m += '' + str(value)
+            message = message + m + '\n'
+
+        return message  
     
     def connect(self,source:dict = {'component':object, 'output':'name'}, 
                 destination:dict = {'component':object, 'input':'name'} , 
@@ -197,9 +209,9 @@ class cosim:
             self.allComponents = allComponents
             
         self.simexec_type = simexec_type
-        print(self.allComponents)
-        print(self.areaComponents)
-        print(self.models)
+        # print(self.allComponents)
+        # print(self.areaComponents)
+        # print(self.models)
         
         self.relationships = self.relationAnalysis(self.areaComponents,self.allComponents)
         # print(self.relationships)
@@ -229,6 +241,8 @@ class cosim:
                              assumption={ 'Gain_modelFMU': [{ 'name': 'temp_in','value': 50 },
                                                          { 'name': 'mass_in','value': 12 }, 
                                                          { 'name': 'vol_in','value': 3.15 }] })
+        else:
+            self.loop =None
                       
         self.exeComponents=[]
         for compName in self.compSchedule:
@@ -346,19 +360,29 @@ class cosim:
         #             break
         newSchedule =[]
         newExeSchedule =[]
-        exeloop = self.loop
-        exeComps = self.allComponents + [exeloop]
-        for compName in self.compSchedule:
-            if compName in self.cycleComp:
-                if self.loop.name not in newSchedule:
-                    newSchedule.append(self.loop.name)
-                    newExeSchedule.append(self.loop)
-            else:
+        # print(self.cycleFlag)
+        if self.cycleFlag == False:
+            exeComps = self.allComponents
+            for compName in self.compSchedule:
                 for exeComp in exeComps:
                     if exeComp.name == compName:
                         newSchedule.append(compName)
                         newExeSchedule.append(exeComp)
                         break
+        else:
+            exeloop = self.loop
+            exeComps = self.allComponents + [exeloop]
+            for compName in self.compSchedule:
+                if compName in self.cycleComp:
+                    if self.loop.name not in newSchedule:
+                        newSchedule.append(self.loop.name)
+                        newExeSchedule.append(self.loop)
+                else:
+                    for exeComp in exeComps:
+                        if exeComp.name == compName:
+                            newSchedule.append(compName)
+                            newExeSchedule.append(exeComp)
+                            break
         
         return newSchedule,newExeSchedule
         

@@ -3,7 +3,7 @@ import os
 import csv
 import importlib
 
-class pythonEncap:
+class Wrapping:
     
     def __init__(self, model = object ,directory = os.getcwd(), 
                  modelName = 'UnitChange', typ = 'SimModel',
