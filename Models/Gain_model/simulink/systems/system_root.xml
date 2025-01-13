@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<System>
+  <P Name="Location">[-1, -7, 1537, 817]</P>
+  <P Name="Open">on</P>
+  <P Name="ReportName">simulink-default.rpt</P>
+  <P Name="SIDHighWatermark">32</P>
+  <Block BlockType="Inport" Name="temp_in" SID="1">
+    <P Name="Position">[220, 188, 250, 202]</P>
+    <P Name="ZOrder">1</P>
+  </Block>
+  <Block BlockType="Inport" Name="mass_in" SID="4">
+    <P Name="Position">[210, 273, 240, 287]</P>
+    <P Name="ZOrder">4</P>
+    <P Name="Port">2</P>
+  </Block>
+  <Block BlockType="Inport" Name="vol_in" SID="7">
+    <P Name="Position">[260, 363, 290, 377]</P>
+    <P Name="ZOrder">7</P>
+    <P Name="Port">3</P>
+  </Block>
+  <Block BlockType="Clock" Name="Clock" SID="26">
+    <P Name="Position">[370, 430, 390, 450]</P>
+    <P Name="ZOrder">316</P>
+  </Block>
+  <Block BlockType="Gain" Name="Gain" SID="18">
+    <P Name="Position">[405, 355, 470, 395]</P>
+    <P Name="ZOrder">308</P>
+    <P Name="Gain">3.785</P>
+  </Block>
+  <Block BlockType="Gain" Name="Gain1" SID="32">
+    <P Name="Position">[470, 310, 535, 350]</P>
+    <P Name="ZOrder">321</P>
+    <P Name="Gain">1000</P>
+  </Block>
+  <Block BlockType="SubSystem" Name="MATLAB Function" SID="27">
+    <PortCounts in="1" out="1"/>
+    <P Name="Position">[420, 167, 490, 213]</P>
+    <P Name="ZOrder">317</P>
+    <P Name="LibrarySourceBlock">simulink/User-Defined
+Functions/MATLAB Function</P>
+    <P Name="ErrorFcn">Stateflow.Translate.translate</P>
+    <P Name="PermitHierarchicalResolution">ExplicitOnly</P>
+    <P Name="TreatAsAtomicUnit">on</P>
+    <P Name="SFBlockType">MATLAB Function</P>
+    <P Name="ContentPreviewEnabled">on</P>
+    <PortProperties>
+      <Port Type="out" Index="1">
+        <P Name="PropagatedSignals">F</P>
+      </Port>
+    </PortProperties>
+    <System Ref="system_27"/>
+  </Block>
+  <Block BlockType="Outport" Name="temp_out" SID="3">
+    <P Name="Position">[660, 188, 690, 202]</P>
+    <P Name="ZOrder">3</P>
+  </Block>
+  <Block BlockType="Outport" Name="mass_out" SID="5">
+    <P Name="Position">[665, 273, 695, 287]</P>
+    <P Name="ZOrder">5</P>
+    <P Name="Port">2</P>
+  </Block>
+  <Block BlockType="Outport" Name="vol_out" SID="20">
+    <P Name="Position">[545, 368, 575, 382]</P>
+    <P Name="ZOrder">310</P>
+    <P Name="Port">3</P>
+  </Block>
+  <Block BlockType="Outport" Name="time_out" SID="22">
+    <P Name="Position">[545, 433, 575, 447]</P>
+    <P Name="ZOrder">312</P>
+    <P Name="Port">4</P>
+  </Block>
+  <Line>
+    <P Name="ZOrder">32</P>
+    <P Name="Src">1#out:1</P>
+    <P Name="Points">[83, 0; 0, -5]</P>
+    <P Name="Dst">27#in:1</P>
+  </Line>
+  <Line>
+    <P Name="ZOrder">33</P>
+    <P Name="Src">27#out:1</P>
+    <P Name="Points">[83, 0; 0, 5]</P>
+    <P Name="Dst">3#in:1</P>
+  </Line>
+  <Line>
+    <P Name="ZOrder">49</P>
+    <P Name="Src">32#out:1</P>
+    <P Name="Points">[19, 0; 0, -50]</P>
+    <P Name="Dst">5#in:1</P>
+  </Line>
+  <Line>
+    <P Name="ZOrder">48</P>
+    <P Name="Src">4#out:1</P>
+    <P Name="Points">[110, 0; 0, 50]</P>
+    <P Name="Dst">32#in:1</P>
+  </Line>
+  <Line>
+    <P Name="ZOrder">19</P>
+    <P Name="Src">7#out:1</P>
+    <P Name="Points">[53, 0; 0, 5]</P>
+    <P Name="Dst">18#in:1</P>
+  </Line>
+  <Line>
+    <P Name="ZOrder">22</P>
+    <P Name="Src">18#out:1</P>
+    <P Name="Dst">20#in:1</P>
+  </Line>
+  <Line>
+    <P Name="ZOrder">31</P>
+    <P Name="Src">26#out:1</P>
+    <P Name="Dst">22#in:1</P>
+  </Line>
+</System>

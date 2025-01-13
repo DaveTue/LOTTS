@@ -1,0 +1,7 @@
+Field,Value
+inputsNames,"temp_in,mass_in,vol_in,time"
+outputsNames,"temp_out,mass_out,vol_out"
+parametersNames,"temp_param,mass_param,vol_param"
+exeSchedule,"1:step_increase,2:unit_transform"
+modelName,UnitChange
+model,Models.UnitChange.Model

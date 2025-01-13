@@ -1,0 +1,7 @@
+Field,Value
+inputsNames,rawTemperature
+outputsNames,temp
+parametersNames,
+exeSchedule,1:processData
+modelName,DataProcess1
+model,Models.dataProcess.TiltSens

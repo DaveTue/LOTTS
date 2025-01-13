@@ -1,0 +1,8 @@
+Field,Value
+inputsNames,rawTemp
+outputsNames,temp
+parametersNames,
+exeSchedule,1:processData
+modelName,DPTempSens
+type,DataProc
+model,Models.dataProcess.TempSens
