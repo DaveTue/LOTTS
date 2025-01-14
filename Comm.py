@@ -539,8 +539,6 @@ class Model(Component):
     def __str__(self) -> str:
         return super().__str__()
     
-    #what can it be done based on areas of execution
-    # define the types of execution here
     def input_update(self, inputs_names = [])-> dict:
         """_summary_
         method update the input of the simulation model (using interface) by the value contain in the port
@@ -699,7 +697,6 @@ class Model(Component):
             for param in self.paramConfig:
                 self.setParam(param=param)
             
-    
     def pause(self)->None:
         """
         This method pause a model object
@@ -862,6 +859,10 @@ class Model(Component):
             Tuple: _description_ the status of all control actions (e.g., ({"pause":true},{"stop":false},{"resume":false})
         """
 
+class ConfigComp(Component):
+    def __init__(self, name="Name", ID="Mod1"):
+        super().__init__(name, ID)
+    
    
 class Source (Component):
    

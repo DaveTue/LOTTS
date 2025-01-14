@@ -111,6 +111,9 @@ class exeArea:
                  allComponents = []) -> None:
         self.name = name
         self.areaComponents =  components
+        self.originalComponents =  []
+        for comp in self.areaComponents:
+            self.originalComponents.append(comp)
         
         if allComponents == []:
             self.allComponents = self.areaComponents
@@ -120,9 +123,11 @@ class exeArea:
         self.startTrigger,self.stopTrigger = self.TriggerDef(triggers=triggers)         
         self.triggers = [self.startTrigger,self.stopTrigger]
         self.triggers = triggers
-    
+      
+            
         self.relationships = self.relationAnalysis(self.areaComponents,self.allComponents)
         # print(self.relationships)
+        self.OutputMapping = self.OutputsrelationAnalysis(self.areaComponents,self.allComponents)
         areaSchedule = compScheduling(relationship_dict=self.relationships,title= self.name)
         # areaSchedule = cosimSchedule(self.relationships)
         self.cycleFlag = areaSchedule.cycleDetected
@@ -132,11 +137,13 @@ class exeArea:
         
         self.exeComponents=[]
         for compName in self.compSchedule:
-            for exeComp in self.allComponents:
+            # for exeComp in self.areaComponents:
+            for exeComp  in self.originalComponents:
                 if exeComp.name == compName:
                     self.exeComponents.append(exeComp)
                     break
-        
+        self.areaInputs, self.areaOutputs = self.AreaPorts(Inputrelationships=self.relationships,
+                                                           outputsRelationship=self.OutputMapping)
         
     def TriggerDef(self,triggers = [])-> tuple:
         """_summary_
@@ -245,14 +252,103 @@ class exeArea:
                 compFound.append(comp)
             
         flagRepeat = False
+        
         for comp in compFound:
             if comp not in areaCompNames and allCompNames[comp].type in list(self.COMUNICATION_TYPES.keys()):
                 flagRepeat = True
                 components.append(allCompNames[comp])
+        
         if flagRepeat == True:
             Alldependencies = self.relationAnalysis(components,allComponents)
         
         return Alldependencies
+    
+    def OutputsrelationAnalysis(self, components, allComponents) -> dict:
+        """
+        Analyze a set of components and generate a dictionary of dependencies.
+
+        Args:
+            components (list): The list of components to analyze.
+            allComponents (list): The complete list of components in the system.
+
+        Returns:
+            dict: A dictionary mapping each component name to its dependencies.
+                Components without dependencies or inports are mapped to an empty dictionary.
+        """
+        
+        OutputsMapping= {}
+        allCompNames = {}
+        areaCompNames = []
+        for component in components:
+            areaCompNames.append(component.name) 
+        for component in allComponents:
+            allCompNames[component.name] = component
+        sizeDict = len(list(allCompNames.keys()))
+        # if sizeDict != len(allComponents):
+        #     print('All names in the system should be different, there are some repeated names')
+        #     return 0
+        if sizeDict != len(allComponents):
+            raise ValueError("Duplicate names found in the system.")
+        compFound =[]
+        for component in components:
+            # print(component)
+            # print('---------------------------------------------')
+            # print(component.outports)
+            dependsON ={}
+            if component.outports == None:
+                OutputsMapping[component.name] = {}
+            else:
+                for outport,port in component.outports.items():
+                    # print(port.connector)
+                    if port.connector !=[]:
+                        componentSrc =port.connector.dst['component'].name
+                    
+                        if componentSrc in dependsON.keys():
+                            dependsON[componentSrc].append(port.name)
+                        else:
+                            dependsON[componentSrc]=[port.name]
+
+                OutputsMapping[component.name] = dependsON
+            compfoundTemp = list(dependsON.keys())
+            for comp in compfoundTemp:
+                compFound.append(comp)
+            
+        flagRepeat = False
+        
+        for comp in compFound:
+            if comp not in areaCompNames and allCompNames[comp].type in list(self.COMUNICATION_TYPES.keys()):
+                flagRepeat = True
+                components.append(allCompNames[comp])
+        
+        if flagRepeat == True:
+            OutputsMapping = self.OutputsrelationAnalysis(components,allComponents)
+        
+        return OutputsMapping
+    
+    def AreaPorts(self, Inputrelationships, outputsRelationship)-> tuple:
+        compNames = []
+        for comp in self.exeComponents:
+            compNames.append(comp.name)
+        #extraction of outputs in the area
+        areaOutputs ={}
+        for areaComp, dependency  in outputsRelationship.items():
+            aOInputs = []
+            if areaComp in compNames:
+                compsDepencency = list(dependency.keys())
+                for compDepen in compsDepencency:
+                    if compDepen not in compNames:
+                        areaOutputs[areaComp] = aOInputs + dependency[compDepen]
+       #extraction of inputs of the area
+        areaInputs ={}
+        for areaComp, dependency  in Inputrelationships.items():
+            compsDepencency = list(dependency.keys())
+            if areaComp in compNames:
+                aInputs = []
+                for compDepen in compsDepencency:
+                    if compDepen not in compNames:
+                        aInputs +=dependency[compDepen]
+                        areaInputs[areaComp] = aInputs 
+        return areaInputs, areaOutputs
     
     def portObj_detect(self, exeComp = []):
         '''
@@ -324,6 +420,15 @@ class exeArea:
             
         
         return Componets_inputs
+    
+    def areaPorts(self,exeComponents = [],relationships ={})->dict:
+        """_summary_
+
+        Returns:
+            dict: _description_
+        """
+
+    
     
     def modelDetector(self, components = [])-> list:
         """_summary_
