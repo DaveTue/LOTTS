@@ -49,11 +49,7 @@ class Port:
         self.val = port['val']
         self.queueState = 'empty'
         self.connector = []
-        # self.name = name
-        # self.unit =  unit
-        # self.datatype = datatype
-        # self.data_elements = self.data_comp_count()
-        # self.val = val
+        self.exchReady = False
         
     def __str__(self) -> str:
         if self.components == 1: 
@@ -91,12 +87,14 @@ class Inport(Port):
         super().__init__(ID, port)
         self.type = 'inp'
         self.direction = 'input'
-    
+        self.exchReady = True
+
 class Outport(Port):
     def __init__(self, ID: str = "port_1", port: dict = { 'name': "Port1",'unit': "m",'datatype': "str",'val': '' }) -> None:
         super().__init__(ID, port)
         self.type = 'outp'
         self.direction = 'output'
+    
     # def __init__(self, ID: str = "port_1", name: str = "Port1", unit: str = "m", datatype: str = "str",val:any = '') -> None:
     #     super().__init__(ID, name, unit, datatype,val)
         
@@ -1693,7 +1691,7 @@ class Connector:
         self.dst = dst
         self.src_port = self.find_port(component = self.src['component'],port_name = self.src['output_name'],type = 'output')
         self.dst_port = self.find_port(component = self.dst['component'],port_name = self.dst['input_name'],type = 'input')
-    
+
         self.names = {'src':'','dst':''}
         self.components = {}
         self.units = {'src':'','dst':''}
@@ -1726,8 +1724,35 @@ class Connector:
                 if port_name == properties['name']:
                     port = component.inports[id]
         return port           
+     
+    def exchState(self,value = True, action = 'read')->None:
+        """modify or reads the port state for exchange data in the port object. 
+        Modification only works for outports, inports state should always be true
+
+        Args:
+            value (bool, optional): _description_. Defaults to True.
+            action (str, optional): _description_. Defaults to 'read'.
+        """
+        # action = 'read'
+        # action = 'modify'
+        if action == 'modify':
+            self.src_port.exchReady = value
+            print(f'Modification of outport {self.src.name} has been performed to {value}')
+       
+        elif action == 'read':
+            outportExch = self.src_port.exchReady
+            inportExch = self.dst_port.exchReady
+            print(f'Output {self.src_port.name} exchange state: {outportExch}')
+            print(f'Input {self.dst_port.name} exchange state: {inportExch}')
+       
+        else:
+            print(f'Action {action} is not supported, it is assume you want to read the data')
+            outportExch = self.src_port.exchReady
+            inportExch = self.dst_port.exchReady
+            print(f'Output {self.src_port.name} exchange state: {outportExch}')
+            print(f'Input {self.dst_port.name} exchange state: {inportExch}')
         
-        
+            
     def data_extraction(self ):
         
         src_port = self.src_port
@@ -1857,6 +1882,8 @@ class Connector:
         # print(queue_val)
         self.Pattern.push(queue_val)
         self.dst_port.queueState  = 'non-empty'
+        if self.src_port.exchReady == True:
+            self.Pattern.enableTransfer()
         
 
     def push_dst(self):
@@ -1883,6 +1910,7 @@ class Connector:
                 # print(c)
                 # print(val)
         self.dst_port.queueState  = queue_state
+        self.src_port.exchReady == False
  
     def con2ports(self):
         self.src_port.connector = self
@@ -1929,8 +1957,104 @@ class Data_Transformation:
         print(value)
         result = eval(expression,value)
         return(result)
-    
+
+
 class Ex_Pattern:
+    PATTERNS = ['FIFO', 'LIFO', 'PQ', 'LVQ', 'BPQ', 'BoC','LVoC']
+    # LVQ = Last Value Queue
+    # BPQ = Batch Processing Queue
+    # PQ = Priority Queue
+
+    def __init__(self, type='FIFO', priority_guards: list = []) -> None:
+        # self.connector = connector
+        self.type = type
+        self.priority_guards = priority_guards
+        self.piority_vals = [i for i in range(1, len(self.priority_guards) + 2)]
+        self.prio_LP = 0
+        self.batchData = []
+        self.exchReady = True
+        if type not in self.PATTERNS:
+            print('Choose a valid pattern. Valid patterns: FIFO, LIFO, PQ (priority queue), LVQ (Last Value queue), BPQ (batch process Queue), BoC (Batch on Completion), LVoC (Last Value on Completion)')
+        
+        if self.type == 'FIFO':
+            self.queue = queue.Queue()
+        elif self.type == 'LIFO':
+            self.queue = queue.LifoQueue()
+        elif self.type == 'PQ':
+            self.queue = queue.PriorityQueue()
+        elif self.type == 'LVQ' or self.type == 'LVoC' or self.type == 'BPQ' or self.type == 'BoC':
+            self.queue = queue.Queue()
+        else:
+            self.queue = queue.Queue()
+
+    def __str__(self) -> str:
+        return f'Queue type {self.type} with size {self.size()}.'
+
+    def size(self) -> int:
+        return self.queue.qsize()
+
+    def PQ_token_gen(self, token: any = 0, last_pos: int = 5) -> tuple:
+        index = 0
+        priority = self.piority_vals[-1]
+        for guard in self.priority_guards:
+            if guard.evaluation() == True:
+                priority = self.piority_vals[index]
+                break
+            index += 1
+        position = last_pos + 1
+        return (priority, position, token)
+
+    def push(self, token: any = 1) -> None:
+        if self.type == 'PQ':
+            position = self.prio_LP
+            token = self.PQ_token_gen(token, position)
+            self.prio_LP = token[1]
+            self.queue.put(token)
+        elif self.type == 'LVQ':
+            # self.batchData.append(token)
+            if self.size() > 0:
+                self.queue.get()
+            self.queue.put(token)
+        elif self.type == 'BPQ' or self.type == 'BoC'or self.type == 'LVoC':
+            self.batchData.append(token)
+        else:
+            self.queue.put(token)
+
+    def enableTransfer(self):
+        if self.type == 'BoC':
+            self.queue.put(self.batchData)
+            self.batchData = []
+        elif self.type == 'LVoC':
+            LV = self.batchData[-1]
+            self.batchData = []
+            self.queue.put(LV)
+        else:
+            pass
+
+    def pull(self) -> any:
+        if self.type == 'LVQ':
+            val = self.queue.get()
+        elif self.type == 'LVoC':
+            val = self.queue.get()
+        elif self.type == 'PQ':
+            val = self.queue.get()[2]
+        elif self.type == 'BPQ':
+            self.queue.put(self.batchData)
+            self.batchData = []
+            val = self.queue.get()
+        # elif self.type == 'BPQ' or self.type == 'BoC':
+        #     accumulated_data = []
+        #     while not self.queue.empty():
+        #         accumulated_data.append(self.queue.get())
+        #     val = accumulated_data
+        else:
+            val = self.queue.get()
+        
+        return val
+
+
+
+class OldEx_Pattern:
     PATTERNS = ['FIFO', 'LIFO' , 'PQ', 'LVQ','BPQ'] 
     # LVQ = Ladt Value queue
     # BPQ = Batch Processing Queue
@@ -1943,8 +2067,9 @@ class Ex_Pattern:
         self.piority_vals = [i for i in range(1,len(self.priority_guards)+2)]
         self.prio_LP = 0
         self.batchData = []
+        self.exchReady = True
         if type not in self.PATTERNS:
-            print('choose a valid pattern. Valid patterns: FIFO, LIFO, PQ (priority queue) or LVQ (Last Value queue)')
+            print('choose a valid pattern. Valid patterns: FIFO, LIFO, PQ (priority queue), LVQ (Last Value queue), BPQ (batch process Queue), BoC (Batch on Completion),LVoC (Last Value on Completion)')
         
         if self.type == 'FIFO':
             self.queue = queue.Queue()
@@ -1952,9 +2077,9 @@ class Ex_Pattern:
             self.queue = queue.LifoQueue()
         elif self.type == 'PQ':
             self.queue = queue.PriorityQueue()
-        elif self.type == 'LVQ':
+        elif self.type == 'LVQ' or self.type == 'LVoC':
             self.queue = collections.deque([])
-        elif self.type == 'BPQ':
+        elif self.type == 'BPQ' or self.type == 'BoC':
             self.queue = collections.deque()
             
         else:
@@ -1970,7 +2095,7 @@ class Ex_Pattern:
         return self.queue.pop()
     
     def size(self) -> int:
-        if self.type != 'LVQ' and self.type !='BPQ':
+        if self.type != 'LVQ' and self.type !='BPQ' and self.type !='BoC' and self.type !='LVoC':
             return(self.queue.qsize())
         
         else:
@@ -2003,15 +2128,36 @@ class Ex_Pattern:
         elif self.type == 'BPQ':
             self.queue.append(token) 
             self.batchData.append(token)
+        elif self.type == 'BoC':
+            # self.queue.append(token) 
+            self.batchData.append(token)
+        elif self.type == 'LVoC':
+            # self.queue.append(token) 
+            self.batchData.append(token)
         else:
             self.queue.put(token) 
-           
+    
+    def enableTransfer(self):
+        if self.type == 'BoC':
+            self.queue.put(self.batchData)
+            self.batchData = []
+        elif self.type == 'LVoC':
+            LV = self.batchData[-1]
+            self.batchData = []
+            self.queue.put(LV)
+            pass
+        else:
+            pass
+            
+    
     def pull(self) -> any:
         if self.type == 'LVQ':
             val = self.lifo_eliminate()
+        if self.type == 'LVoC':
+            val = self.queue
         elif self.type == 'PQ':
             val = self.queue.get()[2]
-        elif self.type == 'BPQ':
+        elif self.type == 'BPQ' or self.type == 'BoC':
             accumulated_data = list(self.queue)
             # accumulated_data = self.batchData
             # self.batchData = [] # reset the accumulated data

@@ -150,7 +150,54 @@ class Trigger:
             self.flagObject = DataFlag(expression=self.definition,allComponents = self.allComponents)
         else:
             print('That category of trigger for '+ self.name + ' is not supported. Only: temporal, guard and data triggers are supported')
-            
+    
+    def consistencyCheck(self,category='temporal', definition = {})-> bool:
+        """
+        
+
+        Args:
+            category (str, optional): _description_. Defaults to 'temporal'.
+            definition (dict, optional): _description_. Defaults to {}.
+
+        Returns:
+            bool: _description_
+        """
+        if category == 'temporal':
+            if type(self.definition) == dict:
+                # self.flagObject = TimeFlag(definition = self.definition,appClock=self.appTime) 
+                return True
+            else:
+                print(f'The definition of the temporal trigger {self.name} is wrong, definition should be a dictionary')
+                return False
+        elif self.allComponents == []:
+            self.flagObject = None
+            print(f'No object for the trigger {self.name} was created, it can only be created when you introduce the component list')        
+            print('Use the obj_gen method to create the object')
+            return False
+        elif category == 'guard':
+            if type(definition) == list:
+                for DefUnit in definition:
+                    eqNum = 0
+                    if self.is_math_equation(DefUnit):
+                        # self.flagObject = GuardFlag(expression=self.definition,allComponents=self.allComponents)
+                        eqNum +=1
+                        print(f'Correct guard definition for trigger {self.name}, for equation num {eqNum}')
+                    else:
+                        print(f'The guard, from equation {eqNum} for trigger {self.name} must be define as a mathematical equation using, >,<, == or !=')
+                        return False
+                return True
+            else:
+                if self.is_math_equation(definition):
+                    print(f'Correct guard definition for trigger {self.name}')
+                    return True 
+                else:
+                    print(f'the guard for trigger {self.name} must be define as a mathematical equation using, >,<, == or !=')
+                    return False
+        elif category == 'data':
+            return True
+        else:
+            print('That category of trigger for '+ self.name + ' is not supported. Only: temporal, guard and data triggers are supported')
+        
     def obj_gen(self,components = [], appTime = None):
         """_summary_
 

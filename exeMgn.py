@@ -1,4 +1,3 @@
-#Areas definition
 import sys
 import time
 from collections import defaultdict, deque
@@ -97,13 +96,8 @@ class ConnectionHandler:
                if port.name == portName:
                     return port
 
-class exeArea:
-    def __init__(self, name = 'area',components=[],triggers =[], 
-                 allComponents = []) -> None:
-        self.name = name
-        
 
-class cosim:
+class exeArea:
     
     COMUNICATION_TYPES = {'tr': 'Transformator', 'agg': 'Aggreggator',
                        'dup': 'Dupplicator','spl': 'Splitter','conn': 'Connector','swi': 'Switch', 
@@ -113,23 +107,259 @@ class cosim:
     SOURCE_TYPES = {'source': 'Source' }
     SIMTYPES = {'time_based':'time_based','invoke':'simulation','continues':'simulation'}
     
-    def __init__(self, name = 'Cosim Area 1',components=[],triggers =[], 
-                 simexec_type = 'time_based', definition = {}, 
-                 configuration = {},
+    def __init__(self, name = 'area',components=[],triggers =[], 
                  allComponents = []) -> None:
-        
         self.name = name
-        self.areaComponents = components
-        self.startTrigger,self.stopTrigger = self.TriggerDef(triggers=triggers)         
-        self.triggers = [self.startTrigger,self.stopTrigger]
-        self.models = self.modelDetector(components= components)
-        
-        self.definition = definition
+        self.areaComponents =  components
         
         if allComponents == []:
             self.allComponents = self.areaComponents
         else:
             self.allComponents = allComponents
+        
+        self.startTrigger,self.stopTrigger = self.TriggerDef(triggers=triggers)         
+        self.triggers = [self.startTrigger,self.stopTrigger]
+        self.triggers = triggers
+    
+        self.relationships = self.relationAnalysis(self.areaComponents,self.allComponents)
+        # print(self.relationships)
+        areaSchedule = compScheduling(relationship_dict=self.relationships,title= self.name)
+        # areaSchedule = cosimSchedule(self.relationships)
+        self.cycleFlag = areaSchedule.cycleDetected
+        self.cycleComp = areaSchedule.cycle_topological_order
+        self.compSchedule = areaSchedule.topological_order
+        self.cycleName = areaSchedule.cycleName
+        
+        self.exeComponents=[]
+        for compName in self.compSchedule:
+            for exeComp in self.allComponents:
+                if exeComp.name == compName:
+                    self.exeComponents.append(exeComp)
+                    break
+        
+        
+    def TriggerDef(self,triggers = [])-> tuple:
+        """_summary_
+
+        Args:
+            triggers (list, optional): _description_. Defaults to [].
+
+        Returns:
+            tuple: _description_
+        """
+        defaultStart = {'type':'stop', 'class':'temporal','definition':{'type':'time','value': 5,'unit':'s'}}
+        defaultStop = {'type':'stop', 'class':'guard','definition':'globals.stopApp == True'}
+        stopTrig = None
+        startTrig = None
+        if triggers == []:
+            print('Defult triggers will be used, no triggers as input')           
+            stopTrig = defaultStop
+            startTrig = defaultStart
+        else:
+            if len(triggers) > 2:
+                print('Only the last start and stop triggers will be consider')
+            for trigger in triggers:
+                if trigger['type'] == 'start':
+                    startTrig = trigger
+                if trigger['type'] == 'stop':
+                    stopTrig = trigger
+            if stopTrig == None:
+                stopTrig = defaultStop
+            if startTrig == None:
+                startTrig = defaultStart
+
+        startTrigger = GlOb.Trigger(name = 'Starttrigger' + self.name, typ=startTrig['type'],
+                                    category=startTrig['class'],definition=startTrig['definition'],allComponents=self.allComponents)
+
+        stopTrigger = GlOb.Trigger(name = 'Stoptrigger' + self.name, typ=stopTrig['type'],
+                                    category=stopTrig['class'],definition=stopTrig['definition'],allComponents=self.allComponents)
+        
+            
+        # trigger = {'type':'start', 'class':'guard','definition':'MassSpringMod.DisplacementOutput > 10'}
+        # trigger = {'type':'start', 'class':'temporal','definition':{'type':'freq','value': 1,'unit':'s'}}
+        # trigger = {'type':'start', 'class':'temporal','definition':{'type':'time','value': 5,'unit':'s'}}
+        # trigger = {'type':'start', 'class':'data','definition':'MassSpringMod.DisplacementOutput'}
+        return(startTrigger,stopTrigger)
+    
+    def timeconverter(self, unit= 's', value = 1)->float:
+        """_summary_
+
+        Args:
+            unit (str, optional): _description_. Defaults to 's'.
+            value (int, optional): _description_. Defaults to 1.
+
+        Returns:
+            float: _description_
+        """
+        if unit == 's':
+            return value
+        elif unit == 'min':
+            return value*60
+        elif unit == 'hr':
+            return value * 60*60
+        else:
+            print('Unit '+unit+' is not supported')
+            return value
+              
+    def relationAnalysis(self, components, allComponents) -> dict:
+        """
+        Analyze a set of components and generate a dictionary of dependencies.
+
+        Args:
+            components (list): The list of components to analyze.
+            allComponents (list): The complete list of components in the system.
+
+        Returns:
+            dict: A dictionary mapping each component name to its dependencies.
+                Components without dependencies or inports are mapped to an empty dictionary.
+        """
+        Alldependencies= {}
+        allCompNames = {}
+        areaCompNames = []
+        for component in components:
+            areaCompNames.append(component.name) 
+        for component in allComponents:
+            allCompNames[component.name] = component
+        sizeDict = len(list(allCompNames.keys()))
+        # if sizeDict != len(allComponents):
+        #     print('All names in the system should be different, there are some repeated names')
+        #     return 0
+        if sizeDict != len(allComponents):
+            raise ValueError("Duplicate names found in the system.")
+        compFound =[]
+        for component in components:
+            dependsON ={}
+            if component.inports == None:
+                Alldependencies[component.name] = {}
+            else:
+                for inport,port in component.inports.items():
+                    componentSrc =port.connector.src['component'].name
+                    if componentSrc in dependsON.keys():
+                        dependsON[componentSrc].append(port.name)
+                    else:
+                        dependsON[componentSrc]=[port.name]
+
+                Alldependencies[component.name] = dependsON
+            compfoundTemp = list(dependsON.keys())
+            for comp in compfoundTemp:
+                compFound.append(comp)
+            
+        flagRepeat = False
+        for comp in compFound:
+            if comp not in areaCompNames and allCompNames[comp].type in list(self.COMUNICATION_TYPES.keys()):
+                flagRepeat = True
+                components.append(allCompNames[comp])
+        if flagRepeat == True:
+            Alldependencies = self.relationAnalysis(components,allComponents)
+        
+        return Alldependencies
+    
+    def portObj_detect(self, exeComp = []):
+        '''
+        Detect all possible ports in the system and generate the system port objects (sys_port)
+        '''
+        # new implementation 
+        allInports = []
+        allOutports = []
+        InputsNames = {}
+        OutputNames = {}
+        for component in exeComp:
+            modelName = component.name
+            # print("For {} the detected ports are:".format(component.name))
+            if component.inports != None:
+                innames =[]
+                for id,input in component.inports.items():
+                    
+                    # port = sys_port(component,input)
+                    allInports.append(input)
+                    InputsNames[modelName]=innames.append(input.name)
+                    # key = modelName + ':'+input.name
+                    # self.ports[key] = input
+                    # print(" Input port name {}".format(key))
+            
+                       
+            if component.outports !=None:
+                outnames =[]
+                for id,output in component.outports.items():
+                    allOutports.append(output)
+                    OutputNames[modelName]=outnames.append(output.name)
+                    # port = sys_port(component,output)
+                    # key = modelName + ':'+output.name
+                    # self.ports[key] = output
+                    # print(" Output port name {}".format(key))
+            
+        
+        return allInports,allOutports
+    
+    def outputsInCycle (self) -> dict:
+        Componets_outputs ={}
+        components =  self.exeCompCycle
+        compNames = []
+        for comp in components:
+            compNames.append(comp.name)
+            
+        for component in components: 
+            Componets_outputs[component.name] =[]
+            for outportID,port in component.outports.items():
+                    componentDst = port.connector.dst['component'].name
+                    if componentDst in compNames:
+                        Componets_outputs[component.name].append(port.name)
+            
+        
+        return Componets_outputs
+
+    def inputsInCycle (self) -> dict:
+        Componets_inputs ={}
+        components =  self.exeCompCycle
+        compNames = []
+        for comp in components:
+            compNames.append(comp.name)
+            
+        for component in components: 
+            Componets_inputs[component.name] =[]
+            for inportID,port in component.inports.items():
+                    componentSrc = port.connector.src['component'].name
+                    if componentSrc in compNames:
+                        Componets_inputs[component.name].append(port.name)
+            
+        
+        return Componets_inputs
+    
+    def modelDetector(self, components = [])-> list:
+        """_summary_
+            detecs out of the inserted list which are models types. 
+        Returns:
+            list: _description_
+        """
+        models = []
+        for component in components:
+            if type(component) is Comm.Model:
+                models.append(component)
+        return models
+    
+    def DataProcDetector(self, components = [])-> list:
+        """_summary_
+            detecs out of the inserted list which are models types. 
+        Returns:
+            list: _description_
+        """
+        models = []
+        for component in components:
+            if type(component) is Comm.Model:
+                models.append(component)
+        return models
+
+class cosim(exeArea):
+    
+    def __init__(self, name = 'Cosim Area 1',components=[],triggers =[], 
+                 simexec_type = 'time_based', definition = {}, 
+                 configuration = {},
+                 allComponents = []) -> None:
+        
+        super().__init__(name,components,triggers,allComponents)
+        
+        self.models = self.modelDetector(components= components)
+        self.definition = definition
             
         self.simexec_type = simexec_type
         
@@ -145,24 +375,7 @@ class cosim:
                 self.exeTime,self.exeConf =self.parseConfig(configDict=configuration)
             else:
                 self.exeTime,self.exeConf =('','')
-        
-        self.relationships = self.relationAnalysis(self.areaComponents,self.allComponents)
-        
-        areaSchedule = simScheduling(relationship_dict=self.relationships,title='CoSim_'+ self.name)
-        
-        self.cycleFlag = areaSchedule.cycleDetected
-        self.cycleComp = areaSchedule.cycle_topological_order
-        self.compSchedule = areaSchedule.topological_order
-        self.cycleName = areaSchedule.cycleName
-        #before
-        # self.cycleFlag = areaSchedule.cycleFlag
-        # self.cycleComp = areaSchedule.cycle
-        # self.compSchedule = areaSchedule.schedule
-        
-        # self.cycleSchedule = []
-        # self.exeCompCycle = []
-        
-        
+              
         if self.cycleFlag == True:
             self.loop = loop(cycleName=self.cycleName,
                              cycleCompNames= self.cycleComp,
@@ -176,29 +389,10 @@ class cosim:
                                                         #  { 'name': 'vol_in','value': 3.15 }] 
         else:
             self.loop =None
-                      
-        self.exeComponents=[]
-        for compName in self.compSchedule:
-            for exeComp in self.allComponents:
-                if exeComp.name == compName:
-                    self.exeComponents.append(exeComp)
-                    break
             
         self.newScheduleCompName,self.newExeComponents = self.compScheduleWLoops()
-        # self.allInputs, self.allOutputs = self.portObj_detect(self.newExeComponents)
+        self.allInputs, self.allOutputs = self.portObj_detect(self.newExeComponents)
             
-    def modelDetector(self, components = [])-> list:
-        """_summary_
-            detecs out of the inserted list which are models types. 
-        Returns:
-            list: _description_
-        """
-        models = []
-        for component in components:
-            if type(component) is Comm.Model:
-                models.append(component)
-        return models
-        
     def initialize(self,models =[], config = {'t_ini':0,'t_period' :30, 't_step':1})-> None:
         """_summary_
         this method initialize all the models contained in this execution area
@@ -234,49 +428,6 @@ class cosim:
         
         return exeTime,new_execonf
     
-    def TriggerDef(self,triggers = [])-> tuple:
-        """_summary_
-
-        Args:
-            triggers (list, optional): _description_. Defaults to [].
-
-        Returns:
-            tuple: _description_
-        """
-        if triggers ==[]:
-            print('Problem with the function, no triggers as input')
-            return '',''
-        
-        # self.triggers = triggers
-        defaultTermination = {'type':'stop', 'class':'temporal','definition':{'type':'time','value': 5,'unit':'min'}}
-        if len(triggers) < 2:
-            flag_triggerStop = False
-        elif len(triggers) >= 2:
-            flag_triggerStop = True
-        for trig in triggers:
-            if trig['type'] == 'start':
-                startTrig = trig
-            elif trig['type'] == 'stop':
-                stopTrig = trig
-            else:
-                print('Error in type can only be start or stop. wrong type ' + trig['type'] )
-            
-        startTrigger = GlOb.Trigger(name = 'Starttrigger' + self.name, typ=startTrig['type'],
-                                    category=startTrig['class'],definition=startTrig['definition'])
-        if flag_triggerStop == True:
-            stopTrigger = GlOb.Trigger(name = 'Stoptrigger' + self.name, typ=stopTrig['type'],
-                                    category=stopTrig['class'],definition=stopTrig['definition'])
-        else:
-            
-            stopTrig = self.defaultTermination
-            stopTrigger = GlOb.Trigger(name = 'DefaultStoptrigger' + self.name, typ=stopTrig['type'],
-                                    category=stopTrig['class'],definition=stopTrig['definition'])
-        # trigger = {'type':'start', 'class':'guard','definition':'MassSpringMod.DisplacementOutput > 10'}
-        # trigger = {'type':'start', 'class':'temporal','definition':{'type':'freq','value': 1,'unit':'s'}}
-        # trigger = {'type':'start', 'class':'temporal','definition':{'type':'time','value': 5,'unit':'s'}}
-        # trigger = {'type':'start', 'class':'streaming','definition':'MassSpringMod.DisplacementOutput'}
-        return(startTrigger,stopTrigger)
-       
     def compScheduleWLoops(self)-> list:
         """_summary_
             This method actually computes the components that needs to be schedule considering loops.
@@ -319,221 +470,7 @@ class cosim:
                             break
         
         return newSchedule,newExeSchedule
-        
-    def LoopSolution(self, SchType = "UserSchedule", schedule = [], 
-                     assumption = {'Gain_model':[{'name':'temp_in','value': 50},
-                                                 {'name':'mass_in','value': 12},
-                                                 {'name':'vol_in','value': 3.15}]}, 
-                    #  exeTime = 'FTRT', 
-                    #  exeConf = {'t_ini':0,'t_period' :11, 't_step':1},
-                     iter = 0)->object:
-        """_summary_
-            It solves an algebraic loop using the simpliest solution
-        Args:
-            type (str, optional): _description_. Defaults to "UserSchedule" or "Automatic"
-
-        Returns:
-            object: _description_
-        """
-        inputsFromConnXcomp = self.inputsFromConnXcomp
-        outputsToConnXcomp = self.outputsToConnXcomp
-        if schedule == []:
-            # schedule =  exeArea.exeCompCycle
-            schedule =  self.exeCompCycle
-            print(schedule[0].inputs)
-            tempList = []
-            tempDict = {}
-            inputsFromConn_init = []
-            
-            
-            if assumption == {}:
-                #inputs names
-                ExeModeIter = 'Initial'
-                for id, input in schedule[0].inputs.items():
-                    tempDict['name'] = input['name']
-                    tempDict['value'] = 'connection'
-                    # print(tempDict)
-                    tempList.append(tempDict)
-                    # print(tempList)
-                    tempDict ={}
-                assumption[schedule[0].name] = tempList
-            else:
-                ExeModeIter = 'Live'
-            
-            
-            if SchType == "UserSchedule":
-                maxIter = 1
-                if iter == 0:
-                    model_assumtion = list(assumption.keys())[0]
-                    # print(model_assumtion)
-                    if model_assumtion != schedule[0].name:
-                        print('Error the assumption must content values for the first element on the schedule of execution')
-                        print('First element for execution is: ' + schedule[0].name)
-                        return 0
-                    else:
-                        changes = list(assumption.values())[0]
-                        for change in changes:
-                            if change['value'] == 'connection':
-                                print(change['name'] + " comes from connection")
-                                inputsFromConn_init.append(change['name'])
-                            else:
-                                schedule[0].Port_update(type = 'input', port_update = change)
-                        for component in schedule:
-                            if type(component) is Comm.Model:
-                                print('\n')
-                                print("component {} :".format(component.name))
-                                if iter == 0 and schedule.index(component) == 0:
-                                    component.runStep(ExeMode = 'Initial',inputsFromConn = inputsFromConn_init)          
-                                else:
-                                    component.runStep(inputsFromConn=inputsFromConnXcomp, outputsToConn=outputsToConnXcomp)          
-                            else:
-                                print('\n')
-                                print("component {} :".format(component.name))
-                                component.behavior()
-                        # maybe not needed
-                        for component in schedule:
-                            if type(component) is Comm.Model:
-                                print("component {} has been stopped".format(component.name))
-                                component.stop()
-     
-    def timeconverter(self, unit= 's', value = 1)->float:
-        """_summary_
-
-        Args:
-            unit (str, optional): _description_. Defaults to 's'.
-            value (int, optional): _description_. Defaults to 1.
-
-        Returns:
-            float: _description_
-        """
-        if unit == 's':
-            return value
-        elif unit == 'min':
-            return value*60
-        elif unit == 'hr':
-            return value * 60*60
-        else:
-            print('Unit '+unit+' is not supported')
-            return value
-              
-    def relationAnalysis(self, components, allComponents) -> dict:
-        """
-        Analyze the set of models and generate a dictionary with dependencies.
-
-        Args:
-            components (_type_): objects
-            allComponents (_type_): _description_
-
-        Returns:
-            dict: _description_
-        """
-        Alldependencies= {}
-        allCompNames = {}
-        areaCompNames = []
-        for component in components:
-            areaCompNames.append(component.name) 
-        for component in allComponents:
-            allCompNames[component.name] = component
-        sizeDict = len(list(allCompNames.keys()))
-        if sizeDict != len(allComponents):
-            print('All names in the system should be different, there are some repeated names')
-            return 0
-        compFound =[]
-        for component in components:
-            dependsON ={}
-            for inport,port in component.inports.items():
-                componentSrc =port.connector.src['component'].name
-                if componentSrc in dependsON.keys():
-                    dependsON[componentSrc].append(port.name)
-                else:
-                    dependsON[componentSrc]=[port.name]
-
-            Alldependencies[component.name] = dependsON
-            compfoundTemp = list(dependsON.keys())
-            for comp in compfoundTemp:
-                compFound.append(comp)
-            
-        flagRepeat = False
-        for comp in compFound:
-            if comp not in areaCompNames and allCompNames[comp].type in list(self.COMUNICATION_TYPES.keys()):
-                flagRepeat = True
-                components.append(allCompNames[comp])
-        if flagRepeat == True:
-            Alldependencies = self.relationAnalysis(components,allComponents)
-        
-        return Alldependencies
-    
-    def portObj_detect(self, exeComp = []):
-        '''
-        Detect all possible ports in the system and generate the system port objects (sys_port)
-        '''
-        # new implementation 
-        allInports = []
-        allOutports = []
-        InputsNames = {}
-        OutputNames = {}
-        for component in exeComp:
-            modelName = component.name
-            # print("For {} the detected ports are:".format(component.name))
-            if component.inports != None:
-                innames =[]
-                for id,input in component.inports.items():
-                    # port = sys_port(component,input)
-                    allInports.append(input)
-                    InputsNames[modelName]=innames.append(input.name)
-                    # key = modelName + ':'+input.name
-                    # self.ports[key] = input
-                    # print(" Input port name {}".format(key))
-            else:
-                allInports = None       
-            if component.outports !=None:
-                outnames =[]
-                for id,output in component.outports.items():
-                    allOutports.append(output)
-                    OutputNames[modelName]=outnames.append(output.name)
-                    # port = sys_port(component,output)
-                    # key = modelName + ':'+output.name
-                    # self.ports[key] = output
-                    # print(" Output port name {}".format(key))
-            else:
-                allOutports = None
-        
-        return allInports,allOutports
-    
-    def outputsInCycle (self) -> dict:
-        Componets_outputs ={}
-        components =  self.exeCompCycle
-        compNames = []
-        for comp in components:
-            compNames.append(comp.name)
-            
-        for component in components: 
-            Componets_outputs[component.name] =[]
-            for outportID,port in component.outports.items():
-                    componentDst = port.connector.dst['component'].name
-                    if componentDst in compNames:
-                        Componets_outputs[component.name].append(port.name)
-            
-        
-        return Componets_outputs
-
-    def inputsInCycle (self) -> dict:
-        Componets_inputs ={}
-        components =  self.exeCompCycle
-        compNames = []
-        for comp in components:
-            compNames.append(comp.name)
-            
-        for component in components: 
-            Componets_inputs[component.name] =[]
-            for inportID,port in component.inports.items():
-                    componentSrc = port.connector.src['component'].name
-                    if componentSrc in compNames:
-                        Componets_inputs[component.name].append(port.name)
-            
-        
-        return Componets_inputs
-     
+         
     def execute(self, simexec_type = '')->None:
         """defines which function to use to execute the area, depending on the
         execution type (simexec_type) has been defined
@@ -698,78 +635,14 @@ class cosim:
                     print("component {} has been stopped".format(component.name))
                     component.stop()
                     
-    def timeSync_noLoop(self,exeTime = 'FTRT', exeConf = {'t_ini':0,'t_period' :11, 't_step':1},
-                 exeComponents = [],iter = 0, ExeModeIter = 'Live')-> dict:
-        """_summary_
-
-        Args:
-            exeTime (str, optional): _description_. Defaults to 'FTRT'. It can only be FTRT = faster than real time or RT real time
-
-        Returns:
-            dict: _description_
-        """
-        # simType = 'time_based'
-        if exeTime != 'FTRT' and exeTime != 'RT':
-            print('The exeTime parameter can only have two values: \n FTRT: Faster Than Real-Time \n RT: Real-time')
-            return False
-
-        t_0= exeConf['t_ini']
-        iter = iter
-        t = t_0
-        t_step = exeConf['t_step']
-        t_end = t + exeConf['t_period']
-        # ExeModeIter
-        if exeComponents == []:
-            exeComponents = self.exeComponents
-        while t <= t_end: 
-            for component in exeComponents:
-                if type(component) is Comm.Model:
-                    print('\n')
-                    print("component {} :".format(component.name))
-                    if iter == 0 and self.exeComponents.index(component) == 0:
-                        component.runStep(ExeMode = 'Initial')          
-                    else:
-                        component.runStep()          
-                else:
-                    print('\n')
-                    print("component {} :".format(component.name))
-                    component.behavior()
-            t +=t_step
-            iter += 1
-            print('\n')
-            print('time is:' + str(t) )
-            print('iteration is:' + str(iter) )
-            print('\n')
-            if exeTime == 'RT':
-                time.sleep(1)
-
-        for component in exeComponents:
-                if type(component) is Comm.Model:
-                    print("component {} has been stopped".format(component.name))
-                    component.stop() 
-        
-class srcExe:
-    COMUNICATION_TYPES = {'tr': 'Transformator', 'agg': 'Aggreggator',
-                       'dup': 'Dupplicator','spl': 'Splitter','conn': 'Connector','swi': 'Switch', 
-                       'inp': 'Input port', 'outp': 'Output port' }
-    SINK_TYPES = {'sink': 'Sink' }
-    DATAPROCESS_TYPES = {'mod': 'Model'}
-    SOURCE_TYPES = {'source': 'Source' }
-    EXETYPES = {'streaming':'streaming','time_specific':'time_specific','invoke':'invoke'}
+class srcExe(exeArea):
     
     def __init__(self,name = 'SrcArea51',components=[],triggers =[{'type':'start', 'class':'temporal','definition':{'type':'freq','value': 1,'unit':'s'}}], 
                  exec_type = 'time_specific', 
-                 definition ={'type':'freq', 'value': 10, 'unit':'s'  },allComponents = [],delayTime = 2) -> None:
+                 definition ={'type':'freq', 'value': 10, 'unit':'s'  },
+                 allComponents = [],delayTime = 2) -> None:
         
-        self.name = name
-        self.areaComponents = components
-        if allComponents == []:
-            self.allComponents = self.areaComponents
-        else:
-            self.allComponents = allComponents
-            
-        self.startTrigger,self.stopTrigger = self.TriggerDef(triggers=triggers)         
-        self.triggers = [self.startTrigger,self.stopTrigger]
+        super().__init__(name,components,triggers,allComponents)
         self.dataProc = self.DataProcDetector(components= components)
         
         self.delayTime = delayTime
@@ -778,201 +651,14 @@ class srcExe:
         
         self.command = None
         
-       
-            
         self.exec_type = exec_type
         self.definition = definition
-        # print(self.allComponents)
-        # print(self.areaComponents)
-        # print(self.dataProc)
         
-        self.relationships = self.relationAnalysis(self.areaComponents,self.allComponents)
-        # print(self.relationships)
-        areaSchedule = simScheduling(relationship_dict=self.relationships,title='Source_'+ self.name)
-        # areaSchedule = cosimSchedule(self.relationships)
-        
-        self.cycleFlag = areaSchedule.cycleDetected
         if self.cycleFlag == True:
             print('There most be an error defining this area, since cycles in this area are not recommended')
-        # self.cycleComp = areaSchedule.cycle_topological_order
-        self.compSchedule = areaSchedule.topological_order
-        # self.cycleName = areaSchedule.cycleName
-                      
-        self.exeComponents=[]
-        for compName in self.compSchedule:
-            for exeComp in self.areaComponents:
-            # for exeComp in self.allComponents:
-                if exeComp.name == compName:
-                    self.exeComponents.append(exeComp)
-                    break
+
+        self.allInputs, self.allOutputs = self.portObj_detect(self.exeComponents)
         
-        # self.allInputs, self.allOutputs = self.portObj_detect(self.exeComponents)
-        
-    def DataProcDetector(self, components = [])-> list:
-        """_summary_
-            detecs out of the inserted list which are models types. 
-        Returns:
-            list: _description_
-        """
-        models = []
-        for component in components:
-            if type(component) is Comm.Model:
-                models.append(component)
-        return models
-    
-    def TriggerDef(self,triggers = [])-> tuple:
-        """_summary_
-
-        Args:
-            triggers (list, optional): _description_. Defaults to [].
-
-        Returns:
-            tuple: _description_
-        """
-        defaultStart = {'type':'stop', 'class':'temporal','definition':{'type':'time','value': 5,'unit':'s'}}
-        defaultStop = {'type':'stop', 'class':'guard','definition':'globals.stopApp == True'}
-        stopTrig = None
-        startTrig = None
-        if triggers == []:
-            print('Defult triggers will be used, no triggers as input')           
-            stopTrig = defaultStop
-            startTrig = defaultStart
-        else:
-            if len(triggers) > 2:
-                print('Only the last start and stop triggers will be consider')
-            for trigger in triggers:
-                if trigger['type'] == 'start':
-                    startTrig = trigger
-                if trigger['type'] == 'stop':
-                    stopTrig = trigger
-            if stopTrig == None:
-                stopTrig = defaultStop
-            if startTrig == None:
-                startTrig = defaultStart
-            
-        startTrigger = GlOb.Trigger(name = 'Starttrigger' + self.name, typ=startTrig['type'],
-                                    category=startTrig['class'],definition=startTrig['definition'],allComponents=self.allComponents)
-        # if flag_triggerStop == True:
-        stopTrigger = GlOb.Trigger(name = 'Stoptrigger' + self.name, typ=stopTrig['type'],
-                                    category=stopTrig['class'],definition=stopTrig['definition'],allComponents=self.allComponents)
-        
-            
-        # trigger = {'type':'start', 'class':'guard','definition':'MassSpringMod.DisplacementOutput > 10'}
-        # trigger = {'type':'start', 'class':'temporal','definition':{'type':'freq','value': 1,'unit':'s'}}
-        # trigger = {'type':'start', 'class':'temporal','definition':{'type':'time','value': 5,'unit':'s'}}
-        # trigger = {'type':'start', 'class':'data','definition':'MassSpringMod.DisplacementOutput'}
-        return(startTrigger,stopTrigger)
-    
-    def relationAnalysis(self, components, allComponents) -> dict:
-        """
-        Analyze a set of components and generate a dictionary of dependencies.
-
-        Args:
-            components (list): The list of components to analyze.
-            allComponents (list): The complete list of components in the system.
-
-        Returns:
-            dict: A dictionary mapping each component name to its dependencies.
-                Components without dependencies or inports are mapped to an empty dictionary.
-        """
-        Alldependencies= {}
-        allCompNames = {}
-        areaCompNames = []
-        for component in components:
-            areaCompNames.append(component.name) 
-        for component in allComponents:
-            allCompNames[component.name] = component
-        sizeDict = len(list(allCompNames.keys()))
-        # if sizeDict != len(allComponents):
-        #     print('All names in the system should be different, there are some repeated names')
-        #     return 0
-        if sizeDict != len(allComponents):
-            raise ValueError("Duplicate names found in the system.")
-        compFound =[]
-        for component in components:
-            dependsON ={}
-            if component.inports == None:
-                Alldependencies[component.name] = {}
-            else:
-                for inport,port in component.inports.items():
-                    componentSrc =port.connector.src['component'].name
-                    if componentSrc in dependsON.keys():
-                        dependsON[componentSrc].append(port.name)
-                    else:
-                        dependsON[componentSrc]=[port.name]
-
-                Alldependencies[component.name] = dependsON
-            compfoundTemp = list(dependsON.keys())
-            for comp in compfoundTemp:
-                compFound.append(comp)
-            
-        flagRepeat = False
-        for comp in compFound:
-            if comp not in areaCompNames and allCompNames[comp].type in list(self.COMUNICATION_TYPES.keys()):
-                flagRepeat = True
-                components.append(allCompNames[comp])
-        if flagRepeat == True:
-            Alldependencies = self.relationAnalysis(components,allComponents)
-        
-        return Alldependencies
-    
-    def portObj_detect(self, exeComp = []):
-        '''
-        Detect all possible ports in the system and generate the system port objects (sys_port)
-        '''
-        # new implementation 
-        allInports = []
-        allOutports = []
-        InputsNames = {}
-        OutputNames = {}
-        for component in exeComp:
-            modelName = component.name
-            # print("For {} the detected ports are:".format(component.name))
-            if component.inports != None:
-                innames =[]
-                for id,input in component.inports.items():
-                    # port = sys_port(component,input)
-                    allInports.append(input)
-                    InputsNames[modelName]=innames.append(input.name)
-                    # key = modelName + ':'+input.name
-                    # self.ports[key] = input
-                    # print(" Input port name {}".format(key))
-            else:
-                allInports = None       
-            if component.outports !=None:
-                outnames =[]
-                for id,output in component.outports.items():
-                    allOutports.append(output)
-                    OutputNames[modelName]=outnames.append(output.name)
-                    # port = sys_port(component,output)
-                    # key = modelName + ':'+output.name
-                    # self.ports[key] = output
-                    # print(" Output port name {}".format(key))
-            else:
-                allOutports = None
-    
-        return allInports,allOutports 
-    
-    def timeconverter(self, unit= 's', value = 1)->float:
-        """_summary_
-
-        Args:
-            unit (str, optional): _description_. Defaults to 's'.
-            value (int, optional): _description_. Defaults to 1.
-
-        Returns:
-            float: _description_
-        """
-        if unit == 's':
-            return value
-        elif unit == 'min':
-            return value*60
-        elif unit == 'hr':
-            return value * 60*60
-        else:
-            print('Unit '+unit+' is not supported')
-            return value
-    
     def initialize(self,sources =[], config = {"type" : "freq", "unit": "s", "occurrences_per_unit":1})-> None:
         """this method initialize all the sources contained in this execution area
 
@@ -1112,16 +798,8 @@ class srcExe:
         for component in exeComponents:
             if type(component) is Comm.Source:
                 component.controller(command='pause')
-        
-
-class sinkExe:
-    COMUNICATION_TYPES = {'tr': 'Transformator', 'agg': 'Aggreggator',
-                       'dup': 'Dupplicator','spl': 'Splitter','conn': 'Connector','swi': 'Switch', 
-                       'inp': 'Input port', 'outp': 'Output port' }
-    SINK_TYPES = {'sink': 'Sink' }
-    DATAPROCESS_TYPES = {'mod': 'Model'}
-    SOURCE_TYPES = {'source': 'Source' }
-    EXETYPES = {'streaming':'streaming','time_specific':'time_specific','invoke':'invoke'}
+          
+class sinkExe(exeArea):
     
     def __init__(self,name = 'SrcArea51',components=[],
                  triggers =[{'type':'start', 'class':'temporal','definition':{'type':'freq','value': 1,'unit':'s'}}], 
@@ -1129,15 +807,7 @@ class sinkExe:
                  definition ={'type':'freq', 'value': 10, 'unit':'s'  },
                  allComponents = [], delayTime = 3) -> None:
         
-        self.name = name
-        self.areaComponents = components
-        if allComponents == []:
-            self.allComponents = self.areaComponents
-        else:
-            self.allComponents = allComponents
-            
-        self.startTrigger,self.stopTrigger = self.TriggerDef(triggers=triggers)         
-        self.triggers = [self.startTrigger,self.stopTrigger]
+        super().__init__(name,components,triggers,allComponents)
         self.dataProc = self.DataProcDetector(components= components)
         
         self.delayTime =  delayTime
@@ -1145,203 +815,14 @@ class sinkExe:
         self.stop = False
         
         self.command = None
-        
-        
-            
+           
         self.exec_type = exec_type
-        self.definition = definition
-        # print(self.allComponents)
-        # print(self.areaComponents)
-        # print(self.dataProc)
+        self.definition = definition        
         
-        self.relationships = self.relationAnalysis(self.areaComponents,self.allComponents)
-        # print(self.relationships)
-        areaSchedule = simScheduling(relationship_dict=self.relationships,title='Sink_'+ self.name)
-        # areaSchedule = cosimSchedule(self.relationships)
-        
-        self.cycleFlag = areaSchedule.cycleDetected
         if self.cycleFlag == True:
             print('There most be an error defining this area, since cycles in this area are not recommended')
-        # self.cycleComp = areaSchedule.cycle_topological_order
-        self.compSchedule = areaSchedule.topological_order
-        # self.cycleName = areaSchedule.cycleName
-                      
-        self.exeComponents=[]
-        for compName in self.compSchedule:
-            for exeComp in self.areaComponents:
-            # for exeComp in self.allComponents:
-                if exeComp.name == compName:
-                    self.exeComponents.append(exeComp)
-                    break
         
-        # self.allInputs, self.allOutputs = self.portObj_detect(self.exeComponents)
-        
-    def DataProcDetector(self, components = [])-> list:
-        """_summary_
-            detecs out of the inserted list which are models types. 
-        Returns:
-            list: _description_
-        """
-        models = []
-        for component in components:
-            if type(component) is Comm.Model:
-                models.append(component)
-        return models
-    
-    def TriggerDef(self,triggers = [])-> tuple:
-        """_summary_
-
-        Args:
-            triggers (list, optional): _description_. Defaults to [].
-
-        Returns:
-            tuple: _description_
-        """
-        defaultStart = {'type':'stop', 'class':'temporal','definition':{'type':'time','value': 0,'unit':'s'}}
-        defaultStop = {'type':'stop', 'class':'guard','definition':'globals.stopApp == True'}
-        stopTrig = None
-        startTrig = None
-        if triggers == []:
-            print('Defult triggers will be used, no triggers as input')           
-            stopTrig = defaultStop
-            startTrig = defaultStart
-        else:
-            if len(triggers) > 2:
-                print('Only the last start and stop triggers will be consider')
-            for trigger in triggers:
-                if trigger['type'] == 'start':
-                    startTrig = trigger
-                if trigger['type'] == 'stop':
-                    stopTrig = trigger
-            if stopTrig == None:
-                stopTrig = defaultStop
-            if startTrig == None:
-                startTrig = defaultStart
-       
-        startTrigger = GlOb.Trigger(name = 'Starttrigger' + self.name, typ=startTrig['type'],
-                                    category=startTrig['class'],definition=startTrig['definition'],allComponents=self.allComponents)
-        
-        stopTrigger = GlOb.Trigger(name = 'Stoptrigger' + self.name, typ=stopTrig['type'],
-                                    category=stopTrig['class'],definition=stopTrig['definition'],allComponents=self.allComponents)
-        
-            
-        # trigger = {'type':'start', 'class':'guard','definition':'MassSpringMod.DisplacementOutput > 10'}
-        # trigger = {'type':'start', 'class':'temporal','definition':{'type':'freq','value': 1,'unit':'s'}}
-        # trigger = {'type':'start', 'class':'temporal','definition':{'type':'time','value': 5,'unit':'s'}}
-        # trigger = {'type':'start', 'class':'data','definition':'MassSpringMod.DisplacementOutput'}
-        return(startTrigger,stopTrigger)
-    
-    def relationAnalysis(self, components, allComponents) -> dict:
-        """
-        Analyze the set of models and generate a dictionary with dependencies.
-
-        Args:
-            components (_type_): objects
-            allComponents (_type_): _description_
-
-        Returns:
-            dict: _description_
-        """
-        Alldependencies= {}
-        allCompNames = {}
-        areaCompNames = []
-        for component in components:
-            areaCompNames.append(component.name) 
-        for component in allComponents:
-            allCompNames[component.name] = component
-        sizeDict = len(list(allCompNames.keys()))
-        if sizeDict != len(allComponents):
-            print('All names in the system should be different, there are some repeated names')
-            return 0
-        compFound =[]
-        for component in components:
-            dependsON ={}
-            if component.inports == None:
-                Alldependencies[component.name] = {}
-            else:
-                for inport,port in component.inports.items():
-                    componentSrc =port.connector.src['component'].name
-                    if componentSrc in dependsON.keys():
-                        dependsON[componentSrc].append(port.name)
-                    else:
-                        dependsON[componentSrc]=[port.name]
-
-                Alldependencies[component.name] = dependsON
-            compfoundTemp = list(dependsON.keys())
-            for comp in compfoundTemp:
-                compFound.append(comp)
-            
-        flagRepeat = False
-        for comp in compFound:
-            if comp not in areaCompNames and allCompNames[comp].type in list(self.COMUNICATION_TYPES.keys()):
-                flagRepeat = True
-                components.append(allCompNames[comp])
-        if flagRepeat == True:
-            Alldependencies = self.relationAnalysis(components,allComponents)
-        
-        return Alldependencies
-    
-    def portObj_detect(self, exeComp = []):
-        '''
-        Detect all possible ports in the system and generate the system port objects (sys_port)
-        '''
-        # new implementation 
-        allInports = []
-        allOutports = []
-        InputsNames = {}
-        OutputNames = {}
-        for component in exeComp:
-            modelName = component.name
-            # print("For {} the detected ports are:".format(component.name))
-            if component.inports != None:
-                innames =[]
-                for id,input in component.inports.items():
-                    # port = sys_port(component,input)
-                    allInports.append(input)
-                    InputsNames[modelName]=innames.append(input.name)
-                    # key = modelName + ':'+input.name
-                    # self.ports[key] = input
-                    # print(" Input port name {}".format(key))
-            else:
-                allInports = None       
-            if component.outports !=None:
-                outnames =[]
-                for id,output in component.outports.items():
-                    allOutports.append(output)
-                    OutputNames[modelName]=outnames.append(output.name)
-                    # port = sys_port(component,output)
-                    # key = modelName + ':'+output.name
-                    # self.ports[key] = output
-                    # print(" Output port name {}".format(key))
-            else:
-                allOutports = None
-        
-        
-            
-        
-        
-        return allInports,allOutports
-    
-    
-    def timeconverter(self, unit= 's', value = 1)->float:
-        """_summary_
-
-        Args:
-            unit (str, optional): _description_. Defaults to 's'.
-            value (int, optional): _description_. Defaults to 1.
-
-        Returns:
-            float: _description_
-        """
-        if unit == 's':
-            return value
-        elif unit == 'min':
-            return value*60
-        elif unit == 'hr':
-            return value * 60*60
-        else:
-            print('Unit '+unit+' is not supported')
-            return value
+        self.allInputs, self.allOutputs = self.portObj_detect(self.exeComponents)
     
     def initialize(self,sinks =[], config = {"type" : "freq", "unit": "s", "occurrences_per_unit":1})-> None:
         """this method initialize all the sources contained in this execution area
@@ -1488,55 +969,10 @@ class sinkExe:
         for component in exeComponents:
             if type(component) is Comm.Sink:
                 component.controller(command='pause')
-        
-    
-class execution2:
-    def __init__(self, models=[],triggers =[]) -> None:
-        self.models = models
-        self.triggers = triggers
-    def initialize(self,models =[],time_end = 30, system = object)-> str:
-        """_summary_
-        this method initialize all the models contained in this execution area
-
-        Returns:
-            str: _description_ returns the states of the models 
-        """
-        for model in models:
-            # model.initialize_model2()
-            model.initialize()
-    def continous(self,models =[],time_end = 30, system = object):
-        # models[0].initialize_model()
-        for connection in system.connections:
-            modelName = connection['src'].model.modelName
-            if modelName == models[0].modelName:
-                src_val = models[0].get_output(connection['src'].name)
-                system.communication(connection['src'],src_val,connection['dst'])
-            #system.communication(src,val,dst)
-        
-        print(models[0].get_status())
-        
-        while models[0].get_status() != ('stopped' or 'terminating'):
-            models[1].resume()
-            
-            # for connection in system.connections:
-                
-            #     system.communication(connection['src'],src_val,connection['dst'])
-
-            for connection in system.connections:
-                if connection['src'].name in models[1].outputs and connection['src'].model.modelName == models[1].modelName:
-                    system.communication(connection['src'],src_val,connection['dst'])
-            
-            #time = 0
-            models[0].resume()
-            #print('\n')
-            for connection in system.connections:
-                if connection['src'].name in models[0].outputs and connection['src'].model.modelName == models[0].modelName:
-                    system.communication(connection['src'],src_val,connection['dst'])
-            print('\n')
-            time.sleep(1)
+ 
 
 #simScheduling works
-class simScheduling:
+class compScheduling:
     
     def __init__(self, relationship_dict = {}, assumtion = [], title = 'Directed Graph', printFlag = True):
         
@@ -2188,602 +1624,4 @@ class loop:
                         name = component.name
                         outputs2update = loopOutputs[name]
                         component.outport_assigment(outputs2update)
-                    
-    
-
-#cosimSchedle, cosimSchedule2 and cosimSchedule3 does not work with independent nodes and with too complex cycles
-class cosimSchedule:
-    def __init__(self, relationships=dict()):
-        self.relationships = relationships
-        print(relationships)
-        self.graph = self.dependency_graph()
-        self.schedule, self.cycle = self.handle_cycles()
-
-    def dependency_graph(self) -> dict:
-        graph = defaultdict(list)
-
-        for element, dependenOn in self.relationships.items():
-            dependants = list(dependenOn.keys())
-
-            for dependant in dependants:
-                graph[element].append(dependant)
-
-        return graph
-
-    def add_node(self, node):
-        """Adds a node to the dependency graph."""
-        if node not in self.graph:
-            self.graph[node] = []
-
-    def add_dependency(self, node, dependency):
-        """Adds a dependency for a given node."""
-        self.add_node(node)
-        self.add_node(dependency)
-        self.graph[node].append(dependency)
-
-    def find_strongly_connected_components(self):
-        """Finds strongly connected components (SCCs) using Tarjan's algorithm."""
-        index = 0
-        stack = []
-        indices = {}
-        lowlinks = {}
-        on_stack = set()
-        sccs = []
-
-        def strongconnect(node):
-            nonlocal index
-            indices[node] = index
-            lowlinks[node] = index
-            index += 1
-            stack.append(node)
-            on_stack.add(node)
-
-            for neighbor in self.graph[node]:
-                if neighbor not in indices:
-                    strongconnect(neighbor)
-                    lowlinks[node] = min(lowlinks[node], lowlinks[neighbor])
-                elif neighbor in on_stack:
-                    lowlinks[node] = min(lowlinks[node], indices[neighbor])
-
-            if lowlinks[node] == indices[node]:
-                scc = []
-                while True:
-                    w = stack.pop()
-                    on_stack.remove(w)
-                    scc.append(w)
-                    if w == node:
-                        break
-                sccs.append(scc)
-
-        for node in self.graph:
-            if node not in indices:
-                strongconnect(node)
-
-        return sccs
-
-    def handle_cycles(self):
-        """Handles cycles in the dependency graph by identifying SCCs and removing minimal edges."""
-        sccs = self.find_strongly_connected_components()
-
-        acyclic_graph = defaultdict(list)
-        scc_map = {}
-
-        for i, scc in enumerate(sccs):
-            for node in scc:
-                scc_map[node] = i
-
-        for node in self.graph:
-            for neighbor in self.graph[node]:
-                if scc_map[node] != scc_map[neighbor]:
-                    acyclic_graph[scc_map[node]].append(scc_map[neighbor])
-
-        scc_graph = {i: scc for i, scc in enumerate(sccs)}
-        resolved_order = []
-        removed_edges = []
-
-        for scc in sccs:
-            if len(scc) > 1:
-                resolved_order.extend(self.resolve_cycle(scc, removed_edges))
-            else:
-                resolved_order.extend(scc)
-
-        for node in self.graph:
-            for neighbor in self.graph[node]:
-                if scc_map[node] != scc_map[neighbor]:
-                    acyclic_graph[scc_map[node]].append(scc_map[neighbor])
-
-        try:
-            sorted_sccs = self.topological_sort(acyclic_graph)
-        except ValueError:
-            raise ValueError("Graph contains irreducible cycles.")
-
-        schedule = []
-        for scc_index in sorted_sccs:
-            schedule.extend(resolved_order if scc_index in scc_graph else scc_graph[scc_index])
-
-        return schedule, [scc for scc in sccs if len(scc) > 1]
-
-    def resolve_cycle(self, cycle, removed_edges):
-        """Resolves a cycle by removing minimal edges to make it acyclic."""
-        cycle_graph = {node: self.graph[node][:] for node in cycle}
-
-        for node in cycle:
-            for neighbor in self.graph[node]:
-                if neighbor in cycle:
-                    cycle_graph[node].remove(neighbor)
-                    removed_edges.append((node, neighbor))
-
-                    if not self.has_cycle_after_removal(cycle_graph):
-                        return self.topological_sort(cycle_graph)
-
-        raise ValueError("Failed to resolve cycle.")
-
-    def has_cycle_after_removal(self, graph):
-        """Checks for a cycle in a modified graph."""
-        visited = set()
-        stack = set()
-
-        def visit(node):
-            if node in stack:
-                return True  # Cycle detected
-            if node in visited:
-                return False
-
-            visited.add(node)
-            stack.add(node)
-            for neighbor in graph[node]:
-                if visit(neighbor):
-                    return True
-            stack.remove(node)
-            return False
-
-        for node in graph:
-            if visit(node):
-                return True
-        return False
-
-    def topological_sort(self, graph=None):
-        """Performs a topological sort on the dependency graph."""
-        if graph is None:
-            graph = self.graph
-
-        # Initialize in_degree for all nodes
-        in_degree = {node: 0 for node in graph}
-        for node in graph:
-            for dependency in graph[node]:
-                if dependency not in in_degree:
-                    in_degree[dependency] = 0
-                in_degree[dependency] += 1
-
-        # Collect nodes with no incoming edges
-        queue = deque([node for node in in_degree if in_degree[node] == 0])
-        sorted_order = []
-
-        while queue:
-            node = queue.popleft()
-            sorted_order.append(node)
-
-            for dependency in graph.get(node, []):
-                in_degree[dependency] -= 1
-                if in_degree[dependency] == 0:
-                    queue.append(dependency)
-
-        if len(sorted_order) != len(graph):
-            raise ValueError("Graph has a cycle, topological sort not possible.")
-
-        return sorted_order
-
-class cosimSchedule2:
-    def __init__(self, relationships = dict()):
-        self.relationships =  relationships
-        print(relationships)
-        # self.graph = defaultdict(list)
-        self.graph = self.dependency_graph()
-        self.cycleFlag = self.has_cycle()
-        
-        if self.cycleFlag:
-            self.cycle = self.find_cycle()
-            sorted_order, removed_edges =self.suggest_sort_with_cycle()
-            self.schedule = sorted_order
-            self.compRemoved = removed_edges
-        else:
-            self.schedule = self.topological_sort()
-            self.cycle = []
-    
-    def dependency_graph(self)-> dict:
-        graph = defaultdict(list)
             
-        for element, dependenOn in self.relationships.items():
-            dependants = list(dependenOn.keys()) 
-           
-            for dependant in dependants:
-                graph[element].append(dependant)
-                
-        return graph
-    
-    def add_node(self, node):
-        """Adds a node to the dependency graph."""
-        if node not in self.graph:
-            self.graph[node] = []
-
-    def add_dependency(self, node, dependency):
-        """Adds a dependency for a given node."""
-        self.add_node(node)
-        self.add_node(dependency)
-        self.graph[node].append(dependency)
-
-    def has_cycle(self):
-        """Detects if there is a cycle in the graph using DFS."""
-        visited = set()
-        stack = set()
-
-        def visit(node):
-            if node in stack:
-                return True  # Cycle detected
-            if node in visited:
-                return False
-
-            visited.add(node)
-            stack.add(node)
-            for neighbor in self.graph[node]:
-                if visit(neighbor):
-                    return True
-            stack.remove(node)
-            return False
-
-        for node in self.graph:
-            if visit(node):
-                return True
-        return False
-
-    def find_cycle(self):
-        """Finds and returns the elements involved in a cycle, if any."""
-        visited = set()
-        stack = []
-        cycle = []
-
-        def dfs(node):
-            if node in stack:
-                cycle_start_index = stack.index(node)
-                cycle.extend(stack[cycle_start_index:])
-                return True
-            if node in visited:
-                return False
-
-            visited.add(node)
-            stack.append(node)
-
-            for neighbor in self.graph[node]:
-                if dfs(neighbor):
-                    return True
-
-            stack.pop()
-            return False
-
-        for node in self.graph:
-            if node not in visited:
-                if dfs(node):
-                    break
-
-        return cycle
-
-    def suggest_sort_with_cycle(self):
-        """Suggests a topological sort by removing the minimum edges to break cycles."""
-        cycle = self.find_cycle()
-
-        if not cycle:
-            return self.topological_sort()  # No cycle, return regular topological sort
-
-        # Remove the minimum edges to break the cycle
-        graph_copy = {node: neighbors[:] for node, neighbors in self.graph.items()}
-
-        min_removed_edges = []
-        for i in range(len(cycle)):
-            src = cycle[i]
-            dest = cycle[(i + 1) % len(cycle)]  # Next node in the cycle
-            if dest in graph_copy[src]:
-                graph_copy[src].remove(dest)
-                min_removed_edges.append((src, dest))
-
-                if not self.has_cycle_after_removal(graph_copy):
-                    break
-
-        # Perform topological sort on the modified graph
-        return self.topological_sort(graph_copy), min_removed_edges
-
-    def has_cycle_after_removal(self, graph):
-        """Checks for a cycle in a modified graph."""
-        visited = set()
-        stack = set()
-
-        def visit(node):
-            if node in stack:
-                return True  # Cycle detected
-            if node in visited:
-                return False
-
-            visited.add(node)
-            stack.add(node)
-            for neighbor in graph[node]:
-                if visit(neighbor):
-                    return True
-            stack.remove(node)
-            return False
-
-        for node in graph:
-            if visit(node):
-                return True
-        return False
-
-    def topological_sort(self, graph=None):
-        """Performs a topological sort on the dependency graph."""
-        if graph is None:
-            graph = self.graph
-
-        in_degree = {node: 0 for node in graph}
-        for node in graph:
-            for dependency in graph[node]:
-                in_degree[dependency] += 1
-
-        # Collect nodes with no incoming edges
-        queue = deque([node for node in graph if in_degree[node] == 0])
-        sorted_order = []
-
-        while queue:
-            node = queue.popleft()
-            sorted_order.append(node)
-
-            for dependency in graph[node]:
-                in_degree[dependency] -= 1
-                if in_degree[dependency] == 0:
-                    queue.append(dependency)
-
-        if len(sorted_order) != len(graph):
-            raise ValueError("Graph has a cycle, topological sort not possible.")
-        sorted_order.reverse()
-        return sorted_order       
-
-class cosimSchedule3:
-    
-    def __init__(self, relationships = dict()):
-        self.relationships =  relationships
-        # self.graph = defaultdict(list)
-        self.graph = self.dependency_graph()
-        self.cycleFlag = self.has_cycle()
-        if self.cycleFlag:
-            self.cycle = self.find_cycle()
-            self.schedule = self.suggest_sort_with_cycle()
-        else:
-            self.schedule = self.topological_sort()
-            self.cycle = []
-        
-    def dependency_graph(self)-> dict:
-        graph = defaultdict(list)
-            
-        for element, dependenOn in self.relationships.items():
-            dependants = list(dependenOn.keys()) 
-           
-            for dependant in dependants:
-                graph[element].append(dependant)
-                
-        return graph
-
-    
-    def add_node(self, node):
-        """Adds a node to the dependency graph."""
-        if node not in self.graph:
-            self.graph[node] = []
-
-    def add_dependency(self, node, dependency):
-        """Adds a dependency for a given node."""
-        self.add_node(node)
-        self.add_node(dependency)
-        self.graph[node].append(dependency)
-
-    def has_cycle(self):
-        """Detects if there is a cycle in the graph using DFS."""
-        visited = set()
-        stack = set()
-
-        def visit(node):
-            if node in stack:
-                return True  # Cycle detected
-            if node in visited:
-                return False
-
-            visited.add(node)
-            stack.add(node)
-            for neighbor in self.graph[node]:
-                if visit(neighbor):
-                    return True
-            stack.remove(node)
-            return False
-
-        for node in self.graph:
-            if visit(node):
-                return True
-        return False
-
-    def find_cycle(self):
-        """Finds and returns the elements involved in a cycle, if any."""
-        visited = set()
-        stack = []
-        cycle = []
-
-        def dfs(node):
-            if node in stack:
-                cycle_start_index = stack.index(node)
-                cycle.extend(stack[cycle_start_index:])
-                return True
-            if node in visited:
-                return False
-
-            visited.add(node)
-            stack.append(node)
-
-            for neighbor in self.graph[node]:
-                if dfs(neighbor):
-                    return True
-
-            stack.pop()
-            return False
-
-        for node in self.graph:
-            if node not in visited:
-                if dfs(node):
-                    break
-
-        return cycle
-
-    def suggest_sort_with_cycle(self):
-        """Suggests a topological sort by ignoring edges involved in cycles."""
-        def remove_cycles(graph):
-            """Identifies and removes edges involved in cycles."""
-            edges_to_remove = set()
-
-            def dfs(node, visited, stack):
-                if node in stack:
-                    # Mark all edges in the cycle for removal
-                    for i in range(len(stack)):
-                        if stack[i] == node:
-                            edges_to_remove.update((stack[j], stack[j + 1]) for j in range(i, len(stack) - 1))
-                            print(edges_to_remove)
-                            break
-                    return
-
-                if node in visited:
-                    return
-
-                visited.add(node)
-                stack.append(node)
-
-                for neighbor in graph[node]:
-                    dfs(neighbor, visited, stack)
-
-                stack.pop()
-
-            visited = set()
-            for node in graph:
-                if node not in visited:
-                    dfs(node, visited, [])
-
-            for src, dest in edges_to_remove:
-                graph[src].remove(dest)
-
-        # Create a copy of the graph to avoid mutating the original
-        graph_copy = {node: neighbors[:] for node, neighbors in self.graph.items()}
-        remove_cycles(graph_copy)
-        print(graph_copy)
-        # Perform topological sort on the modified graph
-        return self.topological_sort(graph_copy)
-
-    def topological_sort(self, graph=None):
-        """Performs a topological sort on the dependency graph."""
-        if graph is None:
-            graph = self.graph
-
-        in_degree = {node: 0 for node in graph}
-        for node in graph:
-            for dependency in graph[node]:
-                in_degree[dependency] += 1
-
-        # Collect nodes with no incoming edges
-        queue = deque([node for node in graph if in_degree[node] == 0])
-        sorted_order = []
-
-        while queue:
-            node = queue.popleft()
-            sorted_order.append(node)
-
-            for dependency in graph[node]:
-                in_degree[dependency] -= 1
-                if in_degree[dependency] == 0:
-                    queue.append(dependency)
-
-        if len(sorted_order) != len(graph):
-            raise ValueError("Graph has a cycle, topological sort not possible.")
-        sorted_order.reverse()
-        return sorted_order
-
-
-class exeArea2:
-    def __init__(self, components=[object]) -> None:
-       self.components = components
-       self.relationships = []
-       self.connections = []
-       self.ports = {}
-       self.triggers = {}
-
-    def __str__(self) -> str: #stil need fixing
-
-        #need some correction for the msg connections and msg relationships
-        component_text = ''
-        if self.components == []:
-            msg_components = 'This system is still empty'
-            msg_relationships = '' 
-            msg_connections = ''
-        else:
-            
-            for component in self.components:
-                component_text= component_text + component.modelName + '\n'
-            msg_components = " The components of the area are:\n " + component_text
-            if self.relationships == []:
-                msg_relationships = 'This area has not defined any relationshis among components'
-            else:
-                msg_relationships = 'The relationship between components are: ' + self.relationships
-            if self.connections ==[]:
-                msg_connections = "This area  has no connections defined"
-            else:
-                msg_connections = 'The connections of the system are: ' + self.connections
-        #return (msg_components + '\n' + msg_relationships +'\n' + msg_connections)
-        return (msg_components)# to avoid errors only return msg components later fix other messages
-    
-    def port_detect(self):
-        '''
-        Detect all possible ports in the system and generate the system port objects (sys_port)
-        '''
-        # new implementation 
-        for component in self.components:
-            modelName = component.name
-            print("For {} the detected ports are:".format(component.name))
-            if component.inports != None:
-                for id,input in component.inports.items():
-                    # port = sys_port(component,input)
-                    key = modelName + ':'+input.name
-                    self.ports[key] = input
-                    print(" Input port name {}".format(key))
-            if component.outports !=None:
-                for id,output in component.outports.items():
-                    # port = sys_port(component,output)
-                    key = modelName + ':'+output.name
-                    self.ports[key] = output
-                    print(" Output port name {}".format(key))
-           
-    def communication(self, src_port= object, src_val = 0 ,dst_port= object):
-        src_name = src_port.name
-        val = src_port.model.get_output(src_name)
-        
-        print('For model {} the output {} value is {}'.format(src_port.model.modelName,src_name,val))
-        dst_name = dst_port.name
-        dst_port.model.set_input(dst_name, val)
-        #print('For model {} the input {} value is {}'.format(dst_port.model.modelName,dst_name,val))
-            
-    def def_connection(self,source = object, destination = object ):
-        '''
-        Define one connection each time by defining source and destination of the connection
-        It also defines the relationship
-        '''
-        connection ={}
-        if source.direction != 'out' or destination.direction != 'in':
-            print('The source must be an output of a model and/or the destination must be an input of a model')
-        else: 
-            connection['src'] = source
-            connection['dst'] = destination
-            id_src = source.model.modelName +':'+source.name 
-            id_dst = destination.model.modelName +':'+destination.name
-            
-            self.connections.append(connection)
-            print('Connection generated:' + id_src + "->" + id_dst)
-
-                
-        
