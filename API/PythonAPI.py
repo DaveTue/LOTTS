@@ -48,7 +48,7 @@ class Wrapping:
             
         # self.exeSchedule = exeSchedule
         
-        
+        self.initFlag = False
         if printFlag == True:
             print(class_data)
     
@@ -179,8 +179,10 @@ class Wrapping:
                 # for outName,outputDict  in self.outputs:
                 #     oD[outputDict['name']] = outputDict['value']
                 print('Model {} current output values: \n {}'.format(self.modelName, outputDict))
+                self.initFlag = True
             else:
                 print('Data Processing does not need to be initialized, it will recieve its first input from sources')
+            
             
     def advance(self, inputs_val = {})-> dict:
             """_summary_

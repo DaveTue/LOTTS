@@ -19,6 +19,7 @@ class Simulink:
         self.inputs = []
         self.outputs = [] 
         self.parameterNames = []
+        self.initFlag = False
         
     def __str__(self) -> str:
         msg_model = "this class encapsulate a model name with s-function as interface" + self.modelName + '_wI'
@@ -41,6 +42,7 @@ class Simulink:
         #disconnection of the engine
         self.eng.set_param(self.modelName,'SimulationCommand','stop',nargout=0)
         self.eng.quit()
+        self.initFlag = False
 
     def load_model(self, model_name = 'Gain_model'):
         #Load the model
@@ -98,7 +100,7 @@ class Simulink:
             outputDict[output] = src_val
         print('Model {} has been initiated with the output values: \n {}'.format(self.modelName, outputDict))
         self.eng.set_param(self.modelName_exe,'SimulationCommand','stop',nargout=0)
-    
+        self.initFlag = True
     def advance(self, inputs_val = {})-> dict:
         """_summary_
         

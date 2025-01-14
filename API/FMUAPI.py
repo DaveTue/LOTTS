@@ -34,6 +34,7 @@ class FMU:
         
         self.exe_model = 'None'
         self.instance = 'None'
+        self.initFlag = False
 
     def get_info(self,infoType = 'all', printInfo = True)->object:
         
@@ -123,6 +124,7 @@ class FMU:
             self.instance = self.exe_model.component
             self.exe_model.enterInitializationMode()
             self.exe_model.exitInitializationMode()
+            self.initFlag = True
         
     def advance(self, inputs_val = {}, printFlag = False)->dict:
         """Advances the FMU simulation by one step.
@@ -348,3 +350,4 @@ class FMU:
         """
         self.exe_model.terminate()
         self.exe_model.freeInstance()
+        self.initFlag = False

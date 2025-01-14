@@ -421,15 +421,6 @@ class exeArea:
         
         return Componets_inputs
     
-    def areaPorts(self,exeComponents = [],relationships ={})->dict:
-        """_summary_
-
-        Returns:
-            dict: _description_
-        """
-
-    
-    
     def modelDetector(self, components = [])-> list:
         """_summary_
             detecs out of the inserted list which are models types. 
@@ -648,7 +639,13 @@ class cosim(exeArea):
                     if iter == 0 and self.exeComponents.index(component) == 0:
                         component.runStep(ExeMode = 'Initial')          
                     else:
-                        component.runStep()          
+                        component.runStep() 
+                        
+                elif type(component) is Comm.ConfigComp:
+                    print('\n')
+                    print("component {} :".format(component.name))
+                    component.setParam()    
+                         
                 elif type(component) is loop:
                     print('\n')
                     print("component {} :".format(component.name))
@@ -680,7 +677,11 @@ class cosim(exeArea):
             if type(component) is Comm.Model:
                 print('\n')
                 print("component {} :".format(component.name))
-                component.simulate()          
+                component.simulate()  
+            elif type(component) is Comm.ConfigComp:
+                    print('\n')
+                    print("component {} :".format(component.name))
+                    component.setParam()        
             elif type(component) is loop:
                 print('\n')
                 print("component {} :".format(component.name))
@@ -716,7 +717,13 @@ class cosim(exeArea):
                 if type(component) is Comm.Model:
                     print('\n')
                     print("component {} :".format(component.name))
-                    component.simulate()          
+                    component.simulate() 
+                    
+                elif type(component) is Comm.ConfigComp:
+                    print('\n')
+                    print("component {} :".format(component.name))
+                    component.setParam()
+                             
                 elif type(component) is loop:
                     print('\n')
                     print("component {} :".format(component.name))
@@ -828,7 +835,11 @@ class srcExe(exeArea):
                 elif type(component) is Comm.Model:
                     print('\n')
                     print("component {} :".format(component.name))
-                    component.runProcessing()         
+                    component.runProcessing()
+                elif type(component) is Comm.ConfigComp:
+                    print('\n')
+                    print("component {} :".format(component.name))
+                    component.setParam()         
                 else:
                     print('\n')
                     print("component {} :".format(component.name))
@@ -864,7 +875,11 @@ class srcExe(exeArea):
                 elif type(component) is Comm.Model:
                     print('\n')
                     print("component {} :".format(component.name))
-                    component.runProcessing()         
+                    component.runProcessing()    
+                elif type(component) is Comm.ConfigComp:
+                    print('\n')
+                    print("component {} :".format(component.name))
+                    component.setParam()     
                 else:
                     print('\n')
                     print("component {} :".format(component.name))
@@ -892,7 +907,11 @@ class srcExe(exeArea):
             elif type(component) is Comm.Model:
                 print('\n')
                 print("component {} :".format(component.name))
-                component.runProcessing()         
+                component.runProcessing() 
+            elif type(component) is Comm.ConfigComp:
+                    print('\n')
+                    print("component {} :".format(component.name))
+                    component.setParam()        
             else:
                 print('\n')
                 print("component {} :".format(component.name))
@@ -992,7 +1011,11 @@ class sinkExe(exeArea):
                 elif type(component) is Comm.Model:
                     print('\n')
                     print("component {} :".format(component.name))
-                    component.runProcessing()         
+                    component.runProcessing() 
+                elif type(component) is Comm.ConfigComp:
+                    print('\n')
+                    print("component {} :".format(component.name))
+                    component.setParam()        
                 else:
                     print('\n')
                     print("component {} :".format(component.name))
@@ -1029,7 +1052,11 @@ class sinkExe(exeArea):
                 elif type(component) is Comm.Model:
                     print('\n')
                     print("component {} :".format(component.name))
-                    component.runProcessing()         
+                    component.runProcessing()    
+                elif type(component) is Comm.ConfigComp:
+                    print('\n')
+                    print("component {} :".format(component.name))
+                    component.setParam()     
                 else:
                     print('\n')
                     print("component {} :".format(component.name))
@@ -1061,7 +1088,11 @@ class sinkExe(exeArea):
             elif type(component) is Comm.Model:
                 print('\n')
                 print("component {} :".format(component.name))
-                component.runProcessing()         
+                component.runProcessing()  
+            elif type(component) is Comm.ConfigComp:
+                    print('\n')
+                    print("component {} :".format(component.name))
+                    component.setParam()       
             else:
                 print('\n')
                 print("component {} :".format(component.name))

@@ -325,18 +325,8 @@ class Component:
                         break
         
         for input_ID in inputs_ID:
-        
-        # for input_name in self.inputs:
-        #get data from connection to inport
             self.inports[input_ID].connector.push_dst()
-            # get data from port to input
-            # if type(self.inports[input_name].val) == dict:
-                
-            #     for name,val  in self.inports[input_name].val.items():
             
-            #         self.inputs[input_name]['value'][name] = self.inports[input_name].val[name] 
-            # else:
-            #     self.inputs[input_name]['value'] =  self.inports[input_name].val
     
     def outport_assigment(self, outputs_names = [])-> None:
         """_summary_
@@ -410,11 +400,6 @@ class Model(Component):
         self.outIDs = []
         self.inIDs = []
         self.dir = modelDir
-        # if interfaceObj == None:
-        #     self.interfaceObj = self.object_gen()
-            
-        # else:
-        #     self.interfaceObj = interfaceObj
         
         if outputs == []:# or inputs == []:
             self.autoDef(name , modelDir,typ = 'output')
@@ -469,8 +454,7 @@ class Model(Component):
         else:
             print(' Engine '+ self.SimE +' not currently supported')
             return None
-        
-            
+                 
     def autoDef (self,name = "name", directory = os.getcwd(),typ = 'input' )-> str:
         """_summary_
             this method constructs the dictionary of names of inputs and outputs based on inspection of model
@@ -663,40 +647,39 @@ class Model(Component):
             else:
                 for portId, port in self.inports.items():
                     port.val = ini_val[port.name]
-                
-        if self.SimE ==  "Simulink":
-            # self.interfaceObj = MatlabAPI.Simulink(self.name, self.dir)
-            self.interfaceObj.inputs= []
-            self.interfaceObj.outputs = []
-            for input in self.inputsDict:
-              self.interfaceObj.inputs.append(input['name'])  #populate the inputs list name with the names
-            for output in self.outputsDict:
-              self.interfaceObj.outputs.append(output['name'])  #populate the otputs list name with the names  
-       
-              
-            self.interfaceObj.connectToMatlab()
-            if desktop == True: 
-                self.interfaceObj.eng.desktop(nargout=0)
-            self.interfaceObj.load_model()
-            
-            self.interfaceObj.initialize_model()
-            
-        elif self.SimE == "Python":
-            self.interfaceObj.initialize_model()
-            print("already started the eng")
+        if self.interfaceObj.initFlag == False:
+            if self.SimE ==  "Simulink":
+                # self.interfaceObj = MatlabAPI.Simulink(self.name, self.dir)
+                self.interfaceObj.inputs= []
+                self.interfaceObj.outputs = []
+                for input in self.inputsDict:
+                    self.interfaceObj.inputs.append(input['name'])  #populate the inputs list name with the names
+                for output in self.outputsDict:
+                    self.interfaceObj.outputs.append(output['name'])  #populate the otputs list name with the names  
         
-        elif self.SimE == 'FMU':
-            # self.interfaceObj = FMUAPI.FMU(self.name,self.dir)
-            self.interfaceObj.load_model()
-            self.interfaceObj.initialize_model()
                 
+                self.interfaceObj.connectToMatlab()
+                if desktop == True: 
+                    self.interfaceObj.eng.desktop(nargout=0)
+                self.interfaceObj.load_model()
+                
+                self.interfaceObj.initialize_model()
+                
+            elif self.SimE == "Python":
+                self.interfaceObj.initialize_model()
+                print("already started the eng")
             
-        
-        #change the values of the parameters once the engine is running. 
-        if self.paramConfig != []:
-            for param in self.paramConfig:
-                self.setParam(param=param)
-            
+            elif self.SimE == 'FMU':
+                # self.interfaceObj = FMUAPI.FMU(self.name,self.dir)
+                self.interfaceObj.load_model()
+                self.interfaceObj.initialize_model()
+            #change the values of the parameters once the engine is running. 
+            if self.paramConfig != []:
+                for param in self.paramConfig:
+                    self.setParam(param=param)
+        else:
+             print(f"Engine {self.SimE} for model {self.name} has already been initialized")       
+    
     def pause(self)->None:
         """
         This method pause a model object
@@ -859,10 +842,174 @@ class Model(Component):
             Tuple: _description_ the status of all control actions (e.g., ({"pause":true},{"stop":false},{"resume":false})
         """
 
-class ConfigComp(Component):
-    def __init__(self, name="Name", ID="Mod1"):
-        super().__init__(name, ID)
+class ConfigComp(Model):
     
+    def __init__(self, name="Name", ID="Mod1", SimE= None, simmod="simulationModel", 
+                 modelDir=os.getcwd(), interfaceObj = None, 
+                 outputs=[], inputs=[], parameters=[]):
+        super().__init__(name, ID, SimE, simmod, modelDir, interfaceObj, outputs, inputs, parameters)
+    
+        self.type = 'config'
+        if SimE not in Model.SIMENG:
+            print("error in the supported Simulation engine:" + SimE + " not supported\n" )
+            print("Currently supports:\n")
+            for se in Model.SimEng:
+                print(se)
+        else:
+            self.SimE = SimE
+        self.ID="Config" + str((random.randrange(20)))
+        self.parameters = None
+        self.parametersNames = None
+        self.paramConfig =None
+        self.inputsDict = []
+        self.outputsDict = None
+        self.outIDs = None
+        self.inIDs = []
+        self.dir = modelDir
+        
+        if inputs == []:
+            self.autoDef(name , modelDir, typ = 'input')
+        else:
+            self.manualDef(inputs = inputs, typ = 'input')
+        
+        if interfaceObj == None:
+            self.interfaceObj = None
+            print(f'Error in defining configuration component {self.name}, the interface object comes from a model component ')
+        else:
+            self.interfaceObj = self.obj_extraction(interfaceObj)
+        
+        if SimE == None and interfaceObj != None:
+           self.SimE = interfaceObj.SimE 
+            
+    def obj_extraction(self, interfaceObj = None)->object:
+        """_summary_
+
+        Args:
+            interfaceObj (_type_, optional): _description_. Defaults to None.
+
+        Returns:
+            object: _description_
+        """
+        #check interface object type
+        if type(interfaceObj) == Model:
+            #extract interface object from model:
+            obj = interfaceObj.interfaceObj
+        else:
+            print(f'Error the interface object input for {self.name} configuration component needs to be a type Model')
+            return None
+        return obj
+    
+    def input_update(self, inputs_names = [])-> dict:
+        """_summary_
+        method update the input of the simulation model (using interface) by the value contain in the port
+        it does not update pass the values to the connector
+        worked?
+        Args:
+            inputs (_type_): this variable can have the following possible values:
+            empty -> means all inputs in the model will be updated. 
+            single input name-> only that input will update its value
+            multiple input names -> only the input names on that list will be updated 
+            all -> means all inputs in the model will be updated. 
+        """
+        inputs_ID = []
+        inputReturn = {}
+        # prepare list
+        if inputs_names == [] or inputs_names == 'all':
+            inputs_names= []
+            for name in self.inputs:
+                inputs_ID.append(name)
+        #if there is only an element of type str
+        elif type(inputs_names) ==str:
+            for inputID in self.inputs:
+                if self.inputs[inputID]['name'] == inputs_names:
+                    inputs_ID.append(inputID)
+                    break
+            # inputs_names = [inputs_names]
+        else:
+            for input_name in inputs_names:
+                for inputID in self.inputs:
+                    if self.inputs[inputID]['name'] == input_name:
+                        inputs_ID.append(inputID)
+                        break
+        
+        for input_ID in inputs_ID:
+        #get data from connection to inport
+            # self.inports[input_name].connector.push_dst()
+            # get data from port to input
+            if type(self.inports[input_ID].val) == dict:
+                
+                for name,val  in self.inports[input_name].val.items():
+            
+                    self.inputs[input_ID]['value'][name] = self.inports[inputs_ID].val[name] 
+                    #missing how to pass this value to specific input in differnet engines
+                    #example: how to pass a dictionary to matlab but also to other types of engines
+            else:
+                # print(self.inports[input_ID].val)
+                # print(self.inputs[input_ID]['value'])
+                self.inputs[input_ID]['value'] =  self.inports[input_ID].val 
+                input_name = self.inputs[input_ID]['name'] 
+                inputReturn[input_name] = self.inputs[input_ID]['value']
+                # self.interfaceObj.set_input(input_name,self.inputs[input_ID]['value'])
+        return inputReturn        
+    
+    def autoDef(self)->None:
+        if type(self.interfaceObj) == 'FMU': 
+            inputNames = self.interfaceObj.paramsNames
+        elif type(self.interfaceObj) == 'Python':
+            inputNames = self.interfaceObj.parametersNames
+        else: 
+            inputNames = self.interfaceObj.parameterNames
+        
+        for input in inputNames:
+                tempdict = {'name':"temporal", 'unit':'', 'datatype':'','val':''}
+                tempdict['name'] = input
+                self.inputDIct.append(tempdict)
+                ID = super().Port_gen(type = 'input', port = tempdict)
+                self.inIDs.append(ID)
+        print('Dont fortget to update the unit, and data type of the inputs since they are not defined in the sink')
+    
+    def manualDef(self, inputs = [])->None:
+        """_summary_
+        function generetes the outputs and outports of the component class with a json value of the list of outputs
+        Args:
+            outpts (list, optional): _description_. Defaults to [].
+
+        Returns:
+            str: _description_
+        """
+        if inputs == []:
+            inputs = self.inputDIct
+        else: 
+            self.inputDIct = inputs
+       
+        for input in inputs:
+            # print(output)
+            ID_input = super().Port_gen(type = 'input',port = input)
+            self.inIDs.append(ID_input)
+
+    def setParam(self,ExeMode = 'Live', inputsFromConn = ["all"])->None:
+        """_summary_
+            set the define parameters with the define values. 
+        Returns:
+            _type_: _description_
+        """
+        if inputsFromConn == ["all"] and ExeMode == 'Live':
+            inputsFromConn = self.inputsNames
+        
+        if len(inputsFromConn) != 0 and ExeMode != 'Initial':
+            self.inport_assigment (inputsFromConn)
+            print('pulling data from connector')
+        
+        input_val = self.input_update(inputs_names = self.inputsNames)
+        print(input_val)
+        for name in input_val:
+            self.interfaceObj.set_parameter(name = name, value = float(input_val[name]))
+        
+        # name = list(param.keys())[0]
+        # # print(name)
+        # value = float(param[name])
+        
+
    
 class Source (Component):
    
