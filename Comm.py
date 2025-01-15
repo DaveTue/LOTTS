@@ -400,15 +400,15 @@ class Model(Component):
         self.outIDs = []
         self.inIDs = []
         self.dir = modelDir
-        
-        if outputs == []:# or inputs == []:
-            self.autoDef(name , modelDir,typ = 'output')
-        else:
-            self.manualDef(outputs= outputs, typ = 'output')
-        if inputs == []:
-            self.autoDef(name , modelDir, typ = 'input')
-        else:
-            self.manualDef(inputs = inputs, typ = 'input')
+        if outputs != None:
+            if outputs == []:# or inputs == []:
+                self.autoDef(name , modelDir,typ = 'output')
+            else:
+                self.manualDef(outputs= outputs, typ = 'output')
+            if inputs == []:
+                self.autoDef(name , modelDir, typ = 'input')
+            else:
+                self.manualDef(inputs = inputs, typ = 'input')
         
         if interfaceObj == None:
             self.interfaceObj = self.object_gen()
@@ -845,11 +845,25 @@ class Model(Component):
 class ConfigComp(Model):
     
     def __init__(self, name="Name", ID="Mod1", SimE= None, simmod="simulationModel", 
-                 modelDir=os.getcwd(), interfaceObj = None, 
+                 modelDir=os.getcwd(), ModelObj = None, interfaceObj = None,
                  outputs=[], inputs=[], parameters=[]):
+        
+        if ModelObj == None:
+            self.interfaceObj = None
+            raise ValueError (f'Error in defining configuration component {self.name}, the interface object comes from a model component ')
+            # print(f'Error in defining configuration component {self.name}, the interface object comes from a model component ')
+        else:
+            self.ModelObj = ModelObj
+        
+        # self.interfaceObj = self.obj_extraction(ModelObj)
+        if SimE == None and interfaceObj != None:
+           self.SimE = interfaceObj.SimE 
+        #    SimE = self.SimE
+        
         super().__init__(name, ID, SimE, simmod, modelDir, interfaceObj, outputs, inputs, parameters)
     
         self.type = 'config'
+        
         if SimE not in Model.SIMENG:
             print("error in the supported Simulation engine:" + SimE + " not supported\n" )
             print("Currently supports:\n")
@@ -868,19 +882,30 @@ class ConfigComp(Model):
         self.dir = modelDir
         
         if inputs == []:
-            self.autoDef(name , modelDir, typ = 'input')
+            self.autoDef()
         else:
-            self.manualDef(inputs = inputs, typ = 'input')
+            self.manualDef(inputs = inputs)
         
-        if interfaceObj == None:
-            self.interfaceObj = None
-            print(f'Error in defining configuration component {self.name}, the interface object comes from a model component ')
-        else:
-            self.interfaceObj = self.obj_extraction(interfaceObj)
+        # if ModelObj == None:
+        #     self.interfaceObj = None
+        #     raise ValueError (f'Error in defining configuration component {self.name}, the interface object comes from a model component ')
+        #     # print(f'Error in defining configuration component {self.name}, the interface object comes from a model component ')
+        # else:
+        #     self.interfaceObj = self.obj_extraction(ModelObj)
         
-        if SimE == None and interfaceObj != None:
-           self.SimE = interfaceObj.SimE 
-            
+        
+    
+    
+    def object_gen(self)-> object:
+        """overwrite the original object generation to extract the interfaceObj 
+        from the reference model
+
+        Returns:
+            object: _description_
+        """
+        obj = self.obj_extraction(self.ModelObj)
+        return obj      
+    
     def obj_extraction(self, interfaceObj = None)->object:
         """_summary_
 

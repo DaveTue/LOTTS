@@ -107,7 +107,7 @@ class Trigger:
     # trigger = {'type':'start', 'class':'guard','definition':'MassSpringMod.DisplacementOutput > 10'}
         # trigger = {'type':'start', 'class':'temporal','definition':{'type':'freq','value': 1,'unit':'s'}}
         # trigger = {'type':'start', 'class':'temporal','definition':{'type':'time','value': 5,'unit':'s'}}
-        # trigger = {'type':'start', 'class':'streaming','definition':'MassSpringMod.DisplacementOutput'}
+        # trigger = {'type':'start', 'class':'data','definition':'MassSpringMod.DisplacementOutput'}
         # trigger = {'type':'stop', 'class':'guard','definition':'globals.stopApp == True'}
     
     
@@ -139,7 +139,7 @@ class Trigger:
             elif self.category == 'guard':
                 self.flagObject = GuardFlag(expression=self.definition,allComponents=self.allComponents)
             elif self.category == 'data':
-                self.flagObject = DataFlag(expression=self.definition,allComponents = self.allComponents)
+                self.flagObject = DataFlag(identifiers=self.definition,allComponents = self.allComponents)
             else:
                 print('That category of trigger for '+ self.name + ' is not supported. Only: temporal, guard and data triggers are supported')
         else:
