@@ -4,7 +4,7 @@ class Model:
                  param = {'R_25':15, 'alpha':0.0039,'d_wire' :0.127,
                           'd_coil':1, 'N':9.25}) -> None:
         self.R = R #ohms
-        self.Tcoil = 200 #C
+        self.T_coil = 200 #C
         self.k = 200 #N/m
         self.param = param
 
@@ -31,8 +31,8 @@ class Model:
         return k
     
     def execute(self):
-        self.Tcoil = self.Tcoil_calculation(self.R)
-        self.k = self.k_calculation(self.Tcoil)
+        self.T_coil = self.Tcoil_calculation(self.R)
+        self.k = self.k_calculation(self.T_coil)
         
         
         

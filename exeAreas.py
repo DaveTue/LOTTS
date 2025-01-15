@@ -115,11 +115,12 @@ class cosim:
     
     def __init__(self, name = 'Cosim Area 1',components=[],triggers =[], 
                  simexec_type = 'time_based', definition = {}, 
-                 configuration = {},
+                 configuration = {}, appTime = None,
                  allComponents = []) -> None:
         
         self.name = name
         self.areaComponents = components
+        self.appTime = appTime
         self.startTrigger,self.stopTrigger = self.TriggerDef(triggers=triggers)         
         self.triggers = [self.startTrigger,self.stopTrigger]
         self.models = self.modelDetector(components= components)

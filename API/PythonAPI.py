@@ -39,6 +39,7 @@ class Wrapping:
         self.inputsNames = []
         self.outputsNames =   []
         self.parametersNames = self.get_params_names()
+        self.parameters = {}
         self.inputs = {}
         self.outputs ={}
         if inputsNames != [] and outputsNames != []:
@@ -275,9 +276,9 @@ class Wrapping:
         only works when the block in matlab has the same name as the name set in this function and the block is a constant
 
         '''
-        param_names = list(self.parameters.keys())
+        param_names = self.parametersNames
         if name not in param_names:
-            print('that name does not match the parameters allow in model' + self.modelName)
+            print(f'Name: {name} does not match the parameters allow in model {self.modelName}')
             return 0
         else:
             self.parameters[name] = value

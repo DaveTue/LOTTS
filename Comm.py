@@ -673,12 +673,16 @@ class Model(Component):
                 # self.interfaceObj = FMUAPI.FMU(self.name,self.dir)
                 self.interfaceObj.load_model()
                 self.interfaceObj.initialize_model()
+            print(f'*******Model {self.name} has been initialized**********')
+            print(f'\n')
             #change the values of the parameters once the engine is running. 
             if self.paramConfig != []:
                 for param in self.paramConfig:
                     self.setParam(param=param)
+                    
         else:
              print(f"Engine {self.SimE} for model {self.name} has already been initialized")       
+        print('*********************************************')
     
     def pause(self)->None:
         """
@@ -753,6 +757,7 @@ class Model(Component):
         
         # if len(inputsFromConn) != 0 and ExeMode == 'Live':
         if len(inputsFromConn) != 0 and ExeMode != 'Initial':
+            print(f'Trying to pull data from connector model {self.name}')
             self.inport_assigment (inputsFromConn)
             print('pulling data from connector')
         
@@ -861,7 +866,7 @@ class ConfigComp(Model):
         #    SimE = self.SimE
         
         super().__init__(name, ID, SimE, simmod, modelDir, interfaceObj, outputs, inputs, parameters)
-    
+        self.paramConfig =[]
         self.type = 'config'
         
         if SimE not in Model.SIMENG:
@@ -891,10 +896,7 @@ class ConfigComp(Model):
         #     raise ValueError (f'Error in defining configuration component {self.name}, the interface object comes from a model component ')
         #     # print(f'Error in defining configuration component {self.name}, the interface object comes from a model component ')
         # else:
-        #     self.interfaceObj = self.obj_extraction(ModelObj)
-        
-        
-    
+        #     self.interfaceObj = self.obj_extraction(ModelObj)   
     
     def object_gen(self)-> object:
         """overwrite the original object generation to extract the interfaceObj 
@@ -1039,7 +1041,7 @@ class ConfigComp(Model):
 class Source (Component):
    
     def __init__(self, name="tilt", ID="Mod1", 
-                config = {"type" : "freq", "unit": "s", "occurrences_per_unit":1},
+                config = {"type" : "freq", "unit": "s", "occurrences_per_unit":10},
                 interfaceType = 'TCP-IP', interfaceObj = None,
                 # sending_port = 55000, receiving_ports = [55001],
                 outputs = [{'name':"temperature", 'unit':'C', 'datatype':'float','val':''},
@@ -2223,6 +2225,7 @@ class Ex_Pattern:
     def pull(self) -> any:
         if self.type == 'LVQ':
             val = self.queue.get()
+            self.queue.put(val)
             self.state = 'active'
         elif self.type == 'LVoC' or self.type == 'BoC':
             val = self.queue.get()

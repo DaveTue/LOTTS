@@ -5,10 +5,30 @@ import GlOb
 
 import threading
 
-class ExeManager:
-    def __init__(self, exeAreas = []):
+class MainManager:
+    def __init__(self, exeAreas = [], globals = None, appTime = None):
         self.threads = []
         self.exeAreas = exeAreas
+        self.globals = globals
+        self.appTime = appTime
+        self.globals.add_appTime(self.appTime)
+    
+         
+    def startService(self):
+        """Start the execution of areas using different threads in each area"""
+        
+        print('---------------------------------------------')
+        print(f"Service execution has started")
+        print('---------------------------------------------')
+        self.initAreas()
+        self.appTime.re_startApp()
+        for area in self.exeAreas:
+            self.start_thread(target=self.areaExec, args=(area,))  # Pass the method reference and the area as an argument
+    
+    def start_thread(self, target, args=()):
+        thread = threading.Thread(target=target, args=args, daemon=True)
+        self.threads.append(thread)
+        thread.start()
     
     def initAreas(self):
         """Initialize all the areas components
@@ -18,20 +38,19 @@ class ExeManager:
             print(f"{area.name} has been initialized")
             print('---------------------------------------------')
             area.initialize()
-            
-    def startExe(self):
-        """Start the execution of areas using different threads in each area
-        """
-        for area in self.exeAreas:
-            print('---------------------------------------------')
-            print(f"{area.name} has started its execution")
-            print('---------------------------------------------')
-            self.start_thread(target=area.execute)  # Pass the method reference without calling it
     
-    def start_thread(self, target):
-        thread = threading.Thread(target=target, daemon=True)
-        self.threads.append(thread)
-        thread.start()
+    def areaExec(self,area)->None:
+        starttrigg = area.startTrigger
+        while  self.globals.stopApp == False:
+            if starttrigg.evaluate() == True:
+                print('\n')
+                print('+++++++++++++++++++++++++++++++++++++++++++++')
+                print(f"{area.name} has started its execution")
+                print('+++++++++++++++++++++++++++++++++++++++++++++')
+                area.execute()
+                print('+++++++++++++++++++++++++++++++++++++++++++++')
+                print(f"{area.name} has finished its execution")
+                print('+++++++++++++++++++++++++++++++++++++++++++++')
     
     def join_threads(self):
         for thread in self.threads:
@@ -56,7 +75,7 @@ class ExeManager:
 #     manager.join_threads()
 #     print("All threads have finished")
 
-            
+
                  
 
 

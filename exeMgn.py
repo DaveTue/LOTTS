@@ -108,13 +108,13 @@ class exeArea:
     SIMTYPES = {'time_based':'time_based','invoke':'simulation','continues':'simulation'}
     
     def __init__(self, name = 'area',components=[],triggers =[], 
-                 allComponents = []) -> None:
+                 allComponents = [],appTime=None) -> None:
         self.name = name
         self.areaComponents =  components
         self.originalComponents =  []
         for comp in self.areaComponents:
             self.originalComponents.append(comp)
-        
+        self.appTime = appTime
         if allComponents == []:
             self.allComponents = self.areaComponents
         else:
@@ -122,7 +122,7 @@ class exeArea:
         
         self.startTrigger,self.stopTrigger = self.TriggerDef(triggers=triggers)         
         self.triggers = [self.startTrigger,self.stopTrigger]
-        self.triggers = triggers
+        # self.triggers = triggers
       
             
         self.relationships = self.relationAnalysis(self.areaComponents,self.allComponents)
@@ -176,10 +176,12 @@ class exeArea:
                 startTrig = defaultStart
 
         startTrigger = GlOb.Trigger(name = 'Starttrigger' + self.name, typ=startTrig['type'],
-                                    category=startTrig['class'],definition=startTrig['definition'],allComponents=self.allComponents)
+                                    category=startTrig['class'],definition=startTrig['definition']
+                                    ,allComponents=self.allComponents,appTime=self.appTime)
 
         stopTrigger = GlOb.Trigger(name = 'Stoptrigger' + self.name, typ=stopTrig['type'],
-                                    category=stopTrig['class'],definition=stopTrig['definition'],allComponents=self.allComponents)
+                                    category=stopTrig['class'],definition=stopTrig['definition'],
+                                     allComponents=self.allComponents,appTime=self.appTime)
         
             
         # trigger = {'type':'start', 'class':'guard','definition':'MassSpringMod.DisplacementOutput > 10'}
@@ -450,15 +452,15 @@ class cosim(exeArea):
     def __init__(self, name = 'Cosim Area 1',components=[],triggers =[], 
                  simexec_type = 'time_based', definition = {}, 
                  configuration = {},
-                 allComponents = []) -> None:
+                 allComponents = [],appTime = None) -> None:
         
-        super().__init__(name,components,triggers,allComponents)
+        super().__init__(name,components,triggers,allComponents,appTime)
         
         self.models = self.modelDetector(components= components)
         self.definition = definition
             
         self.simexec_type = simexec_type
-        
+        self.configuration = configuration
         if self.simexec_type == 'continuous':
             if self.definition == {}:
                 print( 'The continuos exection will execute based on the frequence of the inputs arriving to the models\n')
@@ -489,20 +491,24 @@ class cosim(exeArea):
         self.newScheduleCompName,self.newExeComponents = self.compScheduleWLoops()
         self.allInputs, self.allOutputs = self.portObj_detect(self.newExeComponents)
             
-    def initialize(self,models =[], config = {'t_ini':0,'t_period' :30, 't_step':1})-> None:
+    def initialize(self,models =[], config = {})-> None:
         """_summary_
         this method initialize all the models contained in this execution area
 
         Returns:
             str: _description_ returns the states of the models 
         """
+        # example config = {'t_ini':0,'t_period' :30, 't_step':1}
         if models == []:
             models = self.models
-        for model in models:
-            # model.initialize_model2()
-            model.initialize() 
-        for model in models:
-            model.setConfig(confParam = config)
+        if models != []:
+            if config == {}:
+                config = self.exeConf
+            for model in models:
+                # model.initialize_model2()
+                model.initialize() 
+            for model in models:
+                model.setConfig(confParam = config)
     
     def parseConfig(self,configDict= {})->tuple:
         """_summary_
@@ -543,13 +549,15 @@ class cosim(exeArea):
         newExeSchedule =[]
         # print(self.cycleFlag)
         if self.cycleFlag == False:
-            exeComps = self.allComponents
-            for compName in self.compSchedule:
-                for exeComp in exeComps:
-                    if exeComp.name == compName:
-                        newSchedule.append(compName)
-                        newExeSchedule.append(exeComp)
-                        break
+            newSchedule = self.compSchedule
+            newExeSchedule = self.exeComponents
+            # exeComps = self.allComponents
+            # for compName in self.compSchedule:
+            #     for exeComp in exeComps:
+            #         if exeComp.name == compName:
+            #             newSchedule.append(compName)
+            #             newExeSchedule.append(exeComp)
+            #             break
         else:
             exeloop = self.loop
             exeComps = self.allComponents + [exeloop]
@@ -585,7 +593,7 @@ class cosim(exeArea):
                 print( '\nThe continuos exection will not use the configuration file set up. Since it does not require it')
             # need to create the method that execute a continues time execution
             # self.initialize()
-            self.continuous(defintion=self.defintion)
+            self.continuous(defintion=self.definition)
             
         elif simexec_type == 'time_based':
             if self.configuration == {}:
@@ -595,7 +603,7 @@ class cosim(exeArea):
             else:
                 
                 #execute the area
-                self.timeSync(exeTime = self.exeTime, exeConf = self.execonf)    
+                self.timeSync(exeTime = self.exeTime, exeConf = self.exeConf)    
                 
         elif simexec_type == 'invoke':
             
@@ -630,16 +638,23 @@ class cosim(exeArea):
         if exeComponents == []:
             exeComponents = self.newExeComponents
             # exeComponents = self.exeComponents
-        print(exeComponents)
-        while t <= t_end: 
+        # print(exeComponents)
+        while t <= t_end and self.stopTrigger.evaluate() == False: 
+            print(f'---------------- time is {t} ----------------------')
+            
+            # print(f'-----------------{self.stopTrigger.evaluate()}----------------------------')
             for component in exeComponents:
                 if type(component) is Comm.Model:
                     print('\n')
                     print("component {} :".format(component.name))
-                    if iter == 0 and self.exeComponents.index(component) == 0:
-                        component.runStep(ExeMode = 'Initial')          
-                    else:
-                        component.runStep() 
+                   
+                    component.runStep() 
+                    # if iter == 0 and exeComponents.index(component) == 0:
+                    #     component.runStep(ExeMode = 'Initial')          
+                    # else:
+                       
+                        
+                    #     component.runStep() 
                         
                 elif type(component) is Comm.ConfigComp:
                     print('\n')
@@ -712,7 +727,7 @@ class cosim(exeArea):
         """
         #needs to define the definition if involved
         exeComponents = self.newExeComponents        
-        while self.stopTrigger.evaluation() == False: 
+        while self.stopTrigger.evaluate() == False: 
             for component in exeComponents:
                 if type(component) is Comm.Model:
                     print('\n')
@@ -752,9 +767,9 @@ class srcExe(exeArea):
     def __init__(self,name = 'SrcArea51',components=[],triggers =[{'type':'start', 'class':'temporal','definition':{'type':'freq','value': 1,'unit':'s'}}], 
                  exec_type = 'time_specific', 
                  definition ={'type':'freq', 'value': 10, 'unit':'s'  },
-                 allComponents = [],delayTime = 2) -> None:
+                 allComponents = [], appTime = None,delayTime = 2) -> None:
         
-        super().__init__(name,components,triggers,allComponents)
+        super().__init__(name,components,triggers,allComponents,appTime)
         self.dataProc = self.DataProcDetector(components= components)
         
         self.delayTime = delayTime
@@ -779,7 +794,7 @@ class srcExe(exeArea):
             config (dict, optional): _description_. Defaults to {"type" : "freq", "unit": "s", "occurrences_per_unit":1}.
         """
         if sources == []:
-            sources = self.areaComponents
+            sources = self.exeComponents
         for source in sources:
             # model.initialize_model2()
             source.initialize() 
@@ -810,7 +825,7 @@ class srcExe(exeArea):
             for output in self.allOutputs:
                 output.exchReady = True
         
-    def time_specific(self,exeConf ={'type':'freq','value': 1,'unit':'s'})->None:
+    def time_specific(self,exeConf ={'type':'freq','value': 5,'unit':'s'})->None:
         # conf ={'type':'time','value': 1,'unit':'s'}
         iter = 0
         # t = 0
@@ -929,9 +944,9 @@ class sinkExe(exeArea):
                  triggers =[{'type':'start', 'class':'temporal','definition':{'type':'freq','value': 1,'unit':'s'}}], 
                  exec_type = 'time_specific', 
                  definition ={'type':'freq', 'value': 10, 'unit':'s'  },
-                 allComponents = [], delayTime = 3) -> None:
+                 allComponents = [], appTime = None, delayTime = 3) -> None:
         
-        super().__init__(name,components,triggers,allComponents)
+        super().__init__(name,components,triggers,allComponents,appTime)
         self.dataProc = self.DataProcDetector(components= components)
         
         self.delayTime =  delayTime
@@ -956,7 +971,7 @@ class sinkExe(exeArea):
             config (dict, optional): _description_. Defaults to {"type" : "freq", "unit": "s", "occurrences_per_unit":1}.
         """
         if sinks == []:
-            sinks = self.areaComponents
+            sinks = self.exeComponents
         for sink in sinks:
             # model.initialize_model2()
             sink.initialize() 
