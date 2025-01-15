@@ -2121,6 +2121,8 @@ class Ex_Pattern:
         self.prio_LP = 0
         self.batchData = []
         self.exchReady = True
+        #possible states: active, inactive, waiting
+        self.state = 'inactive'
         if type not in self.PATTERNS:
             print('Choose a valid pattern. Valid patterns: FIFO, LIFO, PQ (priority queue), LVQ (Last Value queue), BPQ (batch process Queue), BoC (Batch on Completion), LVoC (Last Value on Completion)')
         
@@ -2153,43 +2155,61 @@ class Ex_Pattern:
         return (priority, position, token)
 
     def push(self, token: any = 1) -> None:
+        """push a message or token to the queue
+
+        Args:
+            token (any, optional): _description_. Defaults to 1.
+        """
         if self.type == 'PQ':
             position = self.prio_LP
             token = self.PQ_token_gen(token, position)
             self.prio_LP = token[1]
             self.queue.put(token)
+            self.state = 'active'
         elif self.type == 'LVQ':
             # self.batchData.append(token)
             if self.size() > 0:
                 self.queue.get()
             self.queue.put(token)
-        elif self.type == 'BPQ' or self.type == 'BoC'or self.type == 'LVoC':
+            self.state = 'active'
+        elif self.type == 'BPQ' :
             self.batchData.append(token)
+            self.state = 'active'
+        elif self.type == 'BoC'or self.type == 'LVoC': 
+            self.batchData.append(token)
+            self.state = 'waiting'
         else:
             self.queue.put(token)
+            self.state = 'active'
 
     def enableTransfer(self):
         if self.type == 'BoC':
             self.queue.put(self.batchData)
             self.batchData = []
+            self.state = 'active'
         elif self.type == 'LVoC':
             LV = self.batchData[-1]
             self.batchData = []
             self.queue.put(LV)
+            self.state = 'active'
         else:
             pass
 
     def pull(self) -> any:
         if self.type == 'LVQ':
             val = self.queue.get()
-        elif self.type == 'LVoC':
+            self.state = 'active'
+        elif self.type == 'LVoC' or self.type == 'BoC':
             val = self.queue.get()
+            self.state = 'inactive'
         elif self.type == 'PQ':
             val = self.queue.get()[2]
+            self.state = 'active'
         elif self.type == 'BPQ':
             self.queue.put(self.batchData)
             self.batchData = []
             val = self.queue.get()
+            self.state = 'active'
         # elif self.type == 'BPQ' or self.type == 'BoC':
         #     accumulated_data = []
         #     while not self.queue.empty():
@@ -2197,6 +2217,7 @@ class Ex_Pattern:
         #     val = accumulated_data
         else:
             val = self.queue.get()
+            self.state = 'active'
         
         return val
 

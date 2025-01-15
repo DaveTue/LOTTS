@@ -481,14 +481,14 @@ class DataFlag:
         self.objects = []
         self.compNames = []
         self.portNames = []
+        self.Flags = {}
         for indentifier in self.identifiers:
-            elements = self.split_identifier(identifier=self.identifier)
+            elements = self.split_identifier(identifier=indentifier)
             self.compNames.append(elements[0])
             self.portNames.append(elements[1])
         # self.new_expression = self.substitute_identifier(self.expression,old_identifier=identifier[0],new_identifier=self.portName)
             self.objects.append(self.find_object(componentName=elements[0],portName=elements[1]))
-        
-        self.Flags = {name:False for name in self.portNames}
+            self.Flags[elements[1]] = False
         
     def add_components(self, components = [])->None:
         if type(components) == list:
@@ -508,24 +508,6 @@ class DataFlag:
         """
         return identifier.split('.')
 
-    def substitute_identifier(self, expression, old_identifier, new_identifier)->str:
-        """
-        Substitutes an identifier in an expression with a new text.
-
-        Args:
-            expression (str): The original expression (e.g., 'MassSpringMod.DisplacementOutput > 10').
-            old_identifier (str): The identifier to replace (e.g., 'MassSpringMod.DisplacementOutput').
-            new_text (str): The new text to substitute (e.g., 'variable').
-
-        Returns:
-            str: The updated expression with the identifier replaced.
-        """
-        # Escape the old identifier to safely use it in a regex
-        escaped_identifier = re.escape(old_identifier)
-        # Substitute the old identifier with the new text
-        updated_expression = re.sub(rf'\b{escaped_identifier}\b', new_identifier, expression)
-        return updated_expression
-    
     def find_object(self,componentName, portName)->object:
         components = self.allComponents
         exeComp = None
@@ -552,100 +534,34 @@ class DataFlag:
                 return 0
             
             if is_Input == True:
-                for ID, input in exeComp.inputs.items():
-                    if input['name'] == portName:
-                        obj = input
-                        # obj = input['value']
-                        break
-            elif is_Output == True:
-                for ID, output in exeComp.outputs.items():
-                    if output['name'] == portName:
-                        obj = output
-                        # val = output['value']
-                        break
-        return obj
-    
-    def find_value(self,componentName, portName)->float:
-        
-        components = self.allComponents
-        exeComp = None
-        val = 0
-        is_Input = False
-        is_Output = False
-        
-        #identify component
-        for component in components:
-            if component.name == componentName:
-                exeComp = component
-                break
-        if type(exeComp) == GlobalVars:
-            raise ValueError('Globals variables cannot be used as a data trigger')
-        else:
-            #identified if it is input or output
-            if portName in exeComp.inputsNames:
-                is_Input = True
-            elif portName in exeComp.outputsNames:
-                is_Output = True
-            else:
-                raise TypeError(f'The port name {portName} is not part of component {componentName}')
-                
-            
-            if is_Input == True:
                 for ID, input in exeComp.inports.items():
                     if input.name == portName:
-                        dataIn = input.connector.Pattern.size()
-                        if dataIn > 0:
-                            # self.Flags[portName] = True
-                            val = True
-                        else:
-                            # self.Flags[portName] = False
-                            val = False
-                    # if input['name'] == portName:
-                    #     val = input['value']
+                        obj = input.connector.Pattern
+                        # obj = input['value']
                         break
             elif is_Output == True:
                 for ID, output in exeComp.outports.items():
                     if output.name == portName:
-                        dataIn = output.connector.Pattern.size()
-                        if dataIn > 0:
-                            # self.Flags[portName] = True
-                            val = True
-                        else:
-                            # self.Flags[portName] = False
-                            val = False
-                    # if output['name'] == portName:
-                    #     val = output['value']
+                        obj = output.connector.Pattern
+                        # val = output['value']
                         break
-        return val
-            
-    def evaluate_expression(self,expression, variable_name,variable_value):
-        """
-        Evaluates a simple mathematical or logical expression with a single variable.
-
-        Args:
-            expression (str): The expression to evaluate (e.g., 'variable > 10').
-            variable_value: The value of the variable in the expression.
-
-        Returns:
-            bool: The result of the evaluated expression.
-        """
-        # Replace the placeholder 'variable' with the actual value
-        parsed_expression = expression.replace(variable_name, repr(variable_value))
-        
-        # Evaluate the parsed expression
-        try:
-            return eval(parsed_expression)
-        except Exception as e:
-            raise ValueError(f"Invalid expression or variable value: {e}")
+        return obj
     
     def evaluation(self)->bool:
-        
-        if type(self.obj) == GlobalVars:
-            value = self.obj.get_attribute_value(self.portName)
-        else:
-            value = self.obj['value']
+        # portNames = self.portNames
+        idx = 0
+        for obj in self.objects:
+            if obj.state == 'active':
+                value = True
+            else:
+                value = False
+            
+            self.Flags[self.portNames[idx]] = value
+            idx += 1
+            
+        flag = all(value for value in self.Flags.values())     
         # value = self.find_value(componentName=self.compName,portName=self.portName)
-        flag = self.evaluate_expression(expression=self.new_expression,variable_name=self.portName,variable_value=value)
+        # flag = self.evaluate_expression(expression=self.new_expression,variable_name=self.portName,variable_value=value)
         return flag       
         
 
