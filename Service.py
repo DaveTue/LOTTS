@@ -42,20 +42,21 @@ class MainManager:
     
     def areaExec(self,area)->None:
         starttrigg = area.startTrigger
-        iter = 0
+        t = 0
         while  self.globals.stopApp == False:
-            if starttrigg.evaluate() == True and iter<6:
+            if starttrigg.evaluate() == True:
             # if starttrigg.evaluate() == True or iter>6:
                 print('\n')
-                print('+++++++++++++++++++++++++++++++++++++++++++++')
+                print('+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
                 print(f"{area.name} has started its execution")
-                print('+++++++++++++++++++++++++++++++++++++++++++++')
+                print(f"{area.name} has time {t}")
+                print('+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
                 area.execute()
-                iter += 1
+                t += 5
                 print('+++++++++++++++++++++++++++++++++++++++++++++')
                 print(f"{area.name} has finished its execution")
                 print('+++++++++++++++++++++++++++++++++++++++++++++')
-                time.sleep(0.5)
+                time.sleep(1)
     def join_threads(self):
         for thread in self.threads:
             thread.join()

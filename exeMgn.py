@@ -1,3 +1,4 @@
+import logging
 import sys
 import time
 from collections import defaultdict, deque
@@ -6,6 +7,8 @@ import matplotlib.pyplot as plt
 
 import GlOb
 import Comm
+
+logging.basicConfig(filename='loggings\\Exe.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class ConnectionHandler:
     def __init__(self) -> None:
@@ -343,10 +346,12 @@ class exeArea:
                     if compDepen not in compNames:
                         aOInputs += dependency[compDepen]
                         areaOutputs[areaComp] = aOInputs
+                        innerAreaOutputs[areaComp] =ainnerOutnputs
                         # areaOutputs[areaComp] = aOInputs + dependency[compDepen]
                     else:
                         ainnerOutnputs += dependency[compDepen]
                         innerAreaOutputs[areaComp] = ainnerOutnputs 
+                        areaOutputs[areaComp] = aOInputs
        #extraction of inputs of the area
         areaInputs ={}
         innerAreaInputs ={}
@@ -359,9 +364,12 @@ class exeArea:
                     if compDepen not in compNames:
                         aInputs +=dependency[compDepen]
                         areaInputs[areaComp] = aInputs 
+                        innerAreaInputs[areaComp] = ainnerinputs
                     else:
                         ainnerinputs +=dependency[compDepen]
                         innerAreaInputs[areaComp] = ainnerinputs 
+                        areaInputs[areaComp] = aInputs 
+                        
         return areaInputs, areaOutputs, innerAreaInputs,innerAreaOutputs
     
     def portObj_detect(self, exeComp = []):
@@ -502,6 +510,8 @@ class cosim(exeArea):
             
         self.newScheduleCompName,self.newExeComponents = self.compScheduleWLoops()
         self.allInputs, self.allOutputs = self.portObj_detect(self.newExeComponents)
+        self.cout_withPath, self.cout_withOutPath,self.outputsToConn = self.ExPat_filter( execomponents = self.newExeComponents, 
+                                                                      areaOutports =self.areaOutputs , exPat = 'LVoC')
             
     def initialize(self,models =[], config = {})-> None:
         """_summary_
@@ -586,7 +596,53 @@ class cosim(exeArea):
                             break
         
         return newSchedule,newExeSchedule
-         
+    
+    def ExPat_filter(self, execomponents = [], areaOutports ={} , exPat = 'LVoC' ):
+        """_summary_
+
+        Args:
+            execomponents (list, optional): _description_. Defaults to [].
+            areaOutports (dict, optional): _description_. Defaults to {}.
+            exPat (str, optional): _description_. Defaults to 'LVoC'.
+
+        Returns:
+            _type_: _description_
+        """
+        cout_withPath = {}
+        cout_withOutPath ={}
+        for components, outputs in areaOutports.items():
+            if outputs != []:
+                for comp in execomponents:
+                    if comp.name == components:
+                        output_PattExe =[]
+                        output_woPattExe =[]
+                        for id, port in comp.outports.items():
+                            if port.name in outputs:
+                                # print(port.name)
+                                # print(port.connector.Pattern.type)
+                                if port.connector.Pattern.type == exPat:
+                                    output_PattExe.append(port.name)
+                                    cout_withPath[comp.name] =output_PattExe
+                                        # comp_LVoCExe.append(components)
+                                else:
+                                    output_woPattExe.append(port.name)
+                                    cout_withOutPath[comp.name] =output_woPattExe
+        outputsToConn = {}
+        for comp in execomponents:
+            if comp.name in list(cout_withPath.keys()):
+                outputswPath = cout_withPath[comp.name]
+                output2Conn =[]
+                for id,output in comp.outputs.items():
+                    if output['name'] not in outputswPath:
+                        output2Conn.append(output['name'])
+                outputsToConn[comp.name] = output2Conn       
+                    
+            else:
+                outputsToConn[comp.name] = ["all"]
+                
+                
+        return cout_withPath, cout_withOutPath,outputsToConn
+     
     def execute(self, simexec_type = '')->None:
         """defines which function to use to execute the area, depending on the
         execution type (simexec_type) has been defined
@@ -624,9 +680,8 @@ class cosim(exeArea):
         if self.allOutputs != None:
             for output in self.allOutputs:
                 output.exchReady = True
-                output.connector.Pattern.enableTransfer()
-                
-                
+                # output.connector.Pattern.enableTransfer()
+                             
     def timeSync(self,exeTime = 'FTRT', 
                  exeConf = {'t_ini':0,'t_period' :11, 't_step':1},
                  exeComponents = [],iter = 0, ExeModeIter = 'Live')-> None:
@@ -654,20 +709,37 @@ class cosim(exeArea):
             # exeComponents = self.exeComponents
         # print(exeComponents)
         while t <= t_end and self.stopTrigger.evaluate() == False: 
-            print(f'---------------- time is {t} ----------------------')
-            
+            logging.info(f'---------------- time is {t} ----------------------')
+            logging.info(f'---------------- iter is {iter} ----------------------')
             # print(f'-----------------{self.stopTrigger.evaluate()}----------------------------')
             for component in exeComponents:
+                logging.info(f'---------------- {component.name} ----------------------')
+                name = component.name
                 if type(component) is Comm.Model:
-                    print('\n')
-                    print("component {} :".format(component.name))
-                   
                     
-                    if iter == 0:
-                        component.runStep()          
+                    logging.info(f'---------------- {name} ----------------------')
+                    print('\n')
+                    print("component {} :".format(name))
+                   
+                    if iter == 0 and self.cout_withPath != {}:
+                        component.runStep(outputsToConn=self.outputsToConn[name]) 
+                        # logging.info(f'Output contain for {name}')
+                    elif iter == 0:
+                        component.runStep() 
+                        # logging.info(f'why runing {name} ruunig step')
+                    elif self.cout_withPath != {} and t < t_end:
+                        # name = component.name
+                        component.runStep(inputsFromConn= self.innerAreaInputs[name],
+                                          outputsToConn=self.outputsToConn[name]) 
+                        # logging.info(self.innerAreaInputs[name])
+                        # logging.info(self.outputsToConn[name])
+                        # logging.info(f'running {name} whtn t<tend')
                     else:
-                        name = component.name
-                        component.runStep(inputsFromConn= self.innerAreaInputs[name]) 
+                        # name = component.name
+                        component.runStep(inputsFromConn= self.innerAreaInputs[name],
+                                          outputsToConn = ["all"]) 
+                        # logging.info(f'running {name} when t =e_end and pass all otuputs')
+                        
                     # if iter == 0 and exeComponents.index(component) == 0:
                     #     component.runStep(ExeMode = 'Initial')          
                     # else:
@@ -689,7 +761,24 @@ class cosim(exeArea):
                 else:
                     print('\n')
                     print("component {} :".format(component.name))
-                    component.behavior()
+                    # component.behavior()
+                    if iter == 0 and self.cout_withPath != {}:
+                        component.behavior(outputsToConn=self.outputsToConn[name]) 
+                        # logging.info(f'Output contain for {name}')
+                    elif iter == 0:
+                        component.behavior() 
+                        # logging.info(f'why runing {name} ruunig step')
+                    elif self.cout_withPath != {} and t < t_end:
+                        # name = component.name
+                        component.behavior(inputsFromConn= self.innerAreaInputs[name],
+                                          outputsToConn=self.outputsToConn[name]) 
+                        # logging.info(f'running {name} whtn t<tend')
+                    else:
+                        # name = component.name
+                        component.behavior(inputsFromConn= self.innerAreaInputs[name],
+                                          outputsToConn = ["all"]) 
+                        # logging.info(f'running {name} when t =e_end and pass all otuputs')
+                    
             t +=t_step
             iter += 1
             print('\n')
@@ -725,10 +814,10 @@ class cosim(exeArea):
                 print("component {} :".format(component.name))
                 component.behavior()
         
-        iter += 1
+        # iter += 1
         print('\n')
         # print('time is:' + str(t) )
-        print('iteration is:' + str(iter) )
+        # print('iteration is:' + str(iter) )
         print('\n')
             
 
@@ -820,7 +909,8 @@ class srcExe(exeArea):
         for source in sources:
             # source.setConfig(confParam = config)
             if type(source) is Comm.Source:
-                source.controller(command = 'configuration',config = config)
+                # source.controller(command = 'configuration',config = config)
+                pass
                 # print(source.interfaceObj.client)
     
     def execute(self, exec_type = '') -> None:
@@ -997,7 +1087,8 @@ class sinkExe(exeArea):
         for sink in sinks:
             # source.setConfig(confParam = config)
             if type(sink) is Comm.Source:
-                sink.controller(command = 'configuration',config = config)
+                # sink.controller(command = 'configuration',config = config)
+                pass
     
     def execute(self, exec_type = '') -> None:
         if exec_type == '':
@@ -1056,16 +1147,16 @@ class sinkExe(exeArea):
                     component.behavior()
             if self.stop == True:
                 break
-            time.sleep(t_sleep)
+            # time.sleep(t_sleep)
             # t +=t_step
             iter += 1
             print('\n')
             # print('time is:' + str(t) )
             print('iteration is:' + str(iter) )
             print('\n')
-            for component in exeComponents:
-                if type(component) is Comm.Source:
-                    component.controller(command='pause')
+        for component in exeComponents:
+            if type(component) is Comm.Source:
+                component.controller(command='pause')
     
     def streaming(self)->None:
         """_summary_

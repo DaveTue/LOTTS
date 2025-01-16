@@ -1,6 +1,6 @@
 #Component and Communication managers
 
-
+import logging
 import os
 # import csv
 from typing import List, Tuple
@@ -20,7 +20,7 @@ from API.comm_protos.TCP import TCPClient as Client
 
 import GlOb
 
-
+# logging.basicConfig(filename='loggings\\Comm2.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class Port:
     '''
@@ -2160,7 +2160,7 @@ class Ex_Pattern:
         elif self.type == 'PQ':
             self.queue = queue.PriorityQueue()
         elif self.type == 'LVQ' or self.type == 'LVoC' or self.type == 'BPQ' or self.type == 'BoC':
-            self.queue = queue.Queue()
+            self.queue = queue.LifoQueue()
         else:
             self.queue = queue.Queue()
 
@@ -2203,8 +2203,13 @@ class Ex_Pattern:
             self.batchData.append(token)
             self.state = 'active'
         elif self.type == 'BoC'or self.type == 'LVoC': 
-            self.batchData.append(token)
-            self.state = 'waiting'
+            # self.batchData.append(token)
+            self.queue.put(token)
+            logging.info(f' push value {token}')
+            # logging.info('---------------this is the push of the LVoC queue+++++++++++')
+            # logging.info(self.size())
+            # logging.info(self.batchData)
+            self.state = 'active'
         else:
             self.queue.put(token)
             self.state = 'active'
@@ -2215,21 +2220,25 @@ class Ex_Pattern:
             self.batchData = []
             self.state = 'active'
         elif self.type == 'LVoC':
-            LV = self.batchData[-1]
-            self.batchData = []
-            self.queue.put(LV)
+            # LV = self.batchData[-1]
+            # self.batchData = []
+            # self.queue.put(LV)
             self.state = 'active'
         else:
             pass
 
     def pull(self) -> any:
         if self.type == 'LVQ':
+            # logging.info(f'size of queue {self.size()} for value ')
             val = self.queue.get()
+            # logging.info(f' pull value {val}')
             self.queue.put(val)
             self.state = 'waiting'
         elif self.type == 'LVoC' or self.type == 'BoC':
+            
             val = self.queue.get()
-            self.state = 'inactive'
+            logging.info(f' pull value {val}')
+            self.state = 'active'
         elif self.type == 'PQ':
             val = self.queue.get()[2]
             self.state = 'active'
