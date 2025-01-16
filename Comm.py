@@ -2226,7 +2226,7 @@ class Ex_Pattern:
         if self.type == 'LVQ':
             val = self.queue.get()
             self.queue.put(val)
-            self.state = 'active'
+            self.state = 'waiting'
         elif self.type == 'LVoC' or self.type == 'BoC':
             val = self.queue.get()
             self.state = 'inactive'

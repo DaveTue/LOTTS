@@ -142,7 +142,7 @@ class exeArea:
                 if exeComp.name == compName:
                     self.exeComponents.append(exeComp)
                     break
-        self.areaInputs, self.areaOutputs = self.AreaPorts(Inputrelationships=self.relationships,
+        self.areaInputs, self.areaOutputs,self.innerAreaInputs,self.innerAreaOutputs = self.AreaPorts(Inputrelationships=self.relationships,
                                                            outputsRelationship=self.OutputMapping)
         
     def TriggerDef(self,triggers = [])-> tuple:
@@ -333,24 +333,36 @@ class exeArea:
             compNames.append(comp.name)
         #extraction of outputs in the area
         areaOutputs ={}
+        innerAreaOutputs ={}
         for areaComp, dependency  in outputsRelationship.items():
             aOInputs = []
+            ainnerOutnputs =[]
             if areaComp in compNames:
                 compsDepencency = list(dependency.keys())
                 for compDepen in compsDepencency:
                     if compDepen not in compNames:
-                        areaOutputs[areaComp] = aOInputs + dependency[compDepen]
+                        aOInputs += dependency[compDepen]
+                        areaOutputs[areaComp] = aOInputs
+                        # areaOutputs[areaComp] = aOInputs + dependency[compDepen]
+                    else:
+                        ainnerOutnputs += dependency[compDepen]
+                        innerAreaOutputs[areaComp] = ainnerOutnputs 
        #extraction of inputs of the area
         areaInputs ={}
+        innerAreaInputs ={}
         for areaComp, dependency  in Inputrelationships.items():
             compsDepencency = list(dependency.keys())
             if areaComp in compNames:
                 aInputs = []
+                ainnerinputs =[]
                 for compDepen in compsDepencency:
                     if compDepen not in compNames:
                         aInputs +=dependency[compDepen]
                         areaInputs[areaComp] = aInputs 
-        return areaInputs, areaOutputs
+                    else:
+                        ainnerinputs +=dependency[compDepen]
+                        innerAreaInputs[areaComp] = ainnerinputs 
+        return areaInputs, areaOutputs, innerAreaInputs,innerAreaOutputs
     
     def portObj_detect(self, exeComp = []):
         '''
@@ -612,6 +624,8 @@ class cosim(exeArea):
         if self.allOutputs != None:
             for output in self.allOutputs:
                 output.exchReady = True
+                output.connector.Pattern.enableTransfer()
+                
                 
     def timeSync(self,exeTime = 'FTRT', 
                  exeConf = {'t_ini':0,'t_period' :11, 't_step':1},
@@ -648,7 +662,12 @@ class cosim(exeArea):
                     print('\n')
                     print("component {} :".format(component.name))
                    
-                    component.runStep() 
+                    
+                    if iter == 0:
+                        component.runStep()          
+                    else:
+                        name = component.name
+                        component.runStep(inputsFromConn= self.innerAreaInputs[name]) 
                     # if iter == 0 and exeComponents.index(component) == 0:
                     #     component.runStep(ExeMode = 'Initial')          
                     # else:
@@ -750,10 +769,10 @@ class cosim(exeArea):
                     print("component {} :".format(component.name))
                     component.behavior()
             
-            iter += 1
+            # iter += 1
             print('\n')
             # print('time is:' + str(t) )
-            print('iteration is:' + str(iter) )
+            # print('iteration is:' + str(iter) )
             print('\n')
             
 

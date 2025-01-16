@@ -11,7 +11,7 @@ import importlib
 class Sensor:
     
     def __init__(self, comm_proto = 'TCP-IP', 
-                    name  = 'tilt', config = {"type" : "freq", "unit": "s", "occurrences_per_unit":1},
+                    name  = 'tilt', config = {"type" : "freq", "unit": "s", "occurrences_per_unit":20},
                     sending_port = 55000, receiving_ports = [55001], outputsNames = ['temp']) -> None:
                 
         self.comm_proto = comm_proto
